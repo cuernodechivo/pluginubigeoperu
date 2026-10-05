@@ -1,0 +1,8 @@
+# Archivos del sistema y editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ZIPs generados (se publican en Releases)
+*.zip

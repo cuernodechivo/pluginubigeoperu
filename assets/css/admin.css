@@ -1,0 +1,421 @@
+/* Envío Perú — admin */
+
+.uep-wrap .uep-card {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	padding: 16px 20px;
+	margin-top: 16px;
+	max-width: 960px;
+}
+
+.uep-wrap .uep-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 12px 16px;
+	align-items: end;
+}
+
+.uep-wrap .uep-grid label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-weight: 600;
+}
+
+.uep-wrap .uep-grid select,
+.uep-wrap .uep-grid input {
+	width: 100%;
+}
+
+.uep-wrap .uep-submit {
+	display: flex;
+	align-items: end;
+}
+
+.uep-wrap .uep-tabla {
+	margin-top: 8px;
+	max-width: 720px;
+}
+
+.uep-wrap .uep-col-costo {
+	width: 120px;
+	text-align: right;
+}
+
+.uep-wrap .uep-col-acciones {
+	width: 90px;
+	text-align: right;
+}
+
+.uep-wrap .uep-eliminar {
+	color: #b32d2e;
+}
+
+/* Edición rápida en la tabla de tarifas */
+.uep-tabla .uep-campo-edicion,
+.uep-tabla .uep-accion-edicion {
+	display: none;
+}
+
+.uep-tabla tr.uep-editando .uep-campo-edicion {
+	display: inline-block;
+	width: 90px;
+}
+
+.uep-tabla tr.uep-editando .uep-ver,
+.uep-tabla tr.uep-editando .uep-editar,
+.uep-tabla tr.uep-editando .uep-eliminar {
+	display: none;
+}
+
+.uep-tabla tr.uep-editando .uep-accion-edicion {
+	display: inline-block;
+}
+
+.uep-tabla .uep-col-acciones {
+	width: 170px;
+	white-space: nowrap;
+}
+
+.uep-tabla .uep-cancelar {
+	margin-left: 6px;
+}
+
+/* Listas de zonas (cobertura / recojo) */
+.uep-zonas-lista {
+	margin: 0 0 10px;
+}
+
+.uep-zonas-lista li {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 4px 10px;
+	margin-bottom: 4px;
+	display: inline-block;
+	margin-right: 6px;
+}
+
+.uep-zonas-lista .uep-zona-quitar {
+	color: #b32d2e;
+	margin-left: 8px;
+	text-decoration: none;
+}
+
+/* ======================================================================
+ * Panel más fácil (v1.15): inicio, secciones de ajustes, guía rápida
+ * ==================================================================== */
+
+/* --- Inicio: resumen de la tienda --- */
+.uep-resumen {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 14px;
+	margin-top: 12px;
+}
+
+.uep-resumen-tarjeta {
+	border: 1px solid #dcdcde;
+	border-top: 4px solid #2271b1;
+	border-radius: 6px;
+	padding: 12px 16px;
+	background: #fff;
+}
+
+.uep-resumen-agencia { border-top-color: #dba617; }
+.uep-resumen-equipo  { border-top-color: #8c5ad2; }
+
+.uep-resumen-tarjeta h3 {
+	margin: 0 0 4px;
+	font-size: 14px;
+}
+
+.uep-resumen-sub {
+	margin: 0 0 8px;
+	color: #646970;
+	font-size: 12px;
+}
+
+.uep-resumen-tarjeta ul {
+	margin: 0;
+	padding-left: 18px;
+	list-style: disc;
+}
+
+.uep-resumen-tarjeta li {
+	margin-bottom: 6px;
+	line-height: 1.45;
+}
+
+/* --- Inicio: revisión --- */
+.uep-badge {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 2px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+	vertical-align: middle;
+}
+
+.uep-badge-ok     { background: #edfaef; color: #00701a; }
+.uep-badge-alerta { background: #fcf0f1; color: #b32d2e; }
+
+.uep-revision {
+	margin: 8px 0 0;
+}
+
+.uep-revision li {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	padding: 8px 0;
+	border-bottom: 1px solid #f0f0f1;
+	line-height: 1.45;
+}
+
+.uep-revision li:last-child {
+	border-bottom: 0;
+}
+
+.uep-revision-icono {
+	flex: 0 0 20px;
+	height: 20px;
+	border-radius: 50%;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 20px;
+	text-align: center;
+	color: #fff;
+}
+
+.uep-revision-ok .uep-revision-icono     { background: #00a32a; }
+.uep-revision-alerta .uep-revision-icono { background: #d63638; }
+.uep-revision-info .uep-revision-icono   { background: #72aee6; }
+
+.uep-revision-ok .uep-revision-icono::before     { content: "\2713"; }
+.uep-revision-alerta .uep-revision-icono::before { content: "!"; }
+.uep-revision-info .uep-revision-icono::before   { content: "i"; }
+
+.uep-revision a {
+	margin-left: 4px;
+	white-space: nowrap;
+}
+
+/* --- Inicio: simulador --- */
+.uep-sim-form {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 12px 16px;
+	align-items: end;
+	margin: 12px 0;
+}
+
+.uep-sim-form label > span {
+	display: block;
+	margin-bottom: 4px;
+	font-weight: 600;
+}
+
+.uep-sim-form select {
+	width: 100%;
+}
+
+.uep-sim-rol {
+	border: 0;
+	margin: 0;
+	padding: 0;
+}
+
+.uep-sim-rol legend {
+	margin-bottom: 4px;
+	font-weight: 600;
+}
+
+.uep-sim-rol label {
+	display: block;
+	margin-bottom: 2px;
+}
+
+.uep-sim-resultado:empty {
+	display: none;
+}
+
+.uep-sim-resultado {
+	margin-top: 8px;
+	padding-top: 12px;
+	border-top: 1px solid #f0f0f1;
+}
+
+.uep-sim-destino {
+	margin: 0 0 4px;
+	font-size: 14px;
+}
+
+.uep-sim-tabla {
+	margin-top: 10px;
+}
+
+.uep-sim-nota {
+	margin-top: 10px;
+	color: #646970;
+	font-size: 12px;
+}
+
+.uep-etiqueta {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: #f0e6fb;
+	color: #5b2e91;
+	font-size: 11px;
+	font-weight: 600;
+	vertical-align: middle;
+}
+
+.uep-etiqueta-ok      { background: #edfaef; color: #00701a; }
+.uep-etiqueta-agencia { background: #fcf9e8; color: #8a6116; }
+
+/* --- Inicio: atajos --- */
+.uep-atajos .button {
+	margin: 0 6px 6px 0;
+}
+
+/* --- Ajustes: índice y secciones --- */
+.uep-indice {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 8px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.uep-indice a {
+	padding: 4px 12px;
+	border: 1px solid #c3c4c7;
+	border-radius: 999px;
+	background: #f6f7f7;
+	color: #1d2327;
+	font-size: 12px;
+	text-decoration: none;
+}
+
+.uep-indice a:hover,
+.uep-indice a:focus {
+	border-color: #2271b1;
+	color: #2271b1;
+}
+
+.uep-seccion,
+#uep-sec-respaldo,
+#uep-simulador,
+#uep-faq {
+	scroll-margin-top: 48px;
+}
+
+.uep-seccion {
+	padding-top: 18px;
+	border-top: 1px solid #f0f0f1;
+	margin-top: 10px;
+}
+
+.uep-indice + .uep-seccion {
+	border-top: 0;
+	margin-top: 0;
+}
+
+.uep-seccion-titulo {
+	margin: 0 0 4px;
+	font-size: 16px;
+}
+
+.uep-seccion-intro {
+	margin: 0;
+	max-width: 760px;
+	color: #646970;
+}
+
+.uep-seccion .form-table {
+	margin-top: 4px;
+}
+
+/* Sección apagada: las opciones se ven atenuadas pero siguen editables */
+.uep-apagado tr:not(.uep-toggle-fila) {
+	opacity: 0.45;
+}
+
+/* Barra de guardado siempre visible */
+.uep-guardar-barra {
+	position: sticky;
+	bottom: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 18px -20px -16px;
+	padding: 12px 20px;
+	background: #fff;
+	border-top: 1px solid #dcdcde;
+	border-radius: 0 0 6px 6px;
+	box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.04);
+}
+
+/* --- Tarifas: buscador --- */
+.uep-buscador {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 8px 0 4px;
+}
+
+/* --- Guía rápida --- */
+.uep-guia-item {
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	margin-bottom: 8px;
+	background: #fff;
+}
+
+.uep-guia-item summary {
+	padding: 10px 14px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.uep-guia-item[open] summary {
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.uep-guia-item ol {
+	margin: 10px 14px 8px 32px;
+}
+
+.uep-guia-item li {
+	margin-bottom: 4px;
+	line-height: 1.45;
+}
+
+.uep-guia-item .button {
+	margin: 0 14px 12px;
+}
+
+.uep-glosario dt {
+	margin-top: 10px;
+	font-weight: 600;
+}
+
+.uep-glosario dd {
+	margin: 2px 0 0;
+	max-width: 760px;
+	color: #3c434a;
+}
+
+@media (max-width: 782px) {
+	.uep-guardar-barra {
+		margin: 18px -12px -16px;
+		padding: 12px;
+	}
+}

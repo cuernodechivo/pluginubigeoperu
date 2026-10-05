@@ -1,0 +1,44 @@
+# Al subir una etiqueta vX.Y.Z crea la versión en GitHub con el ZIP listo
+# para instalar en WordPress (carpeta interna "ubigeo-envio-peru").
+name: Publicar versión
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar que la etiqueta coincide con la versión del plugin
+        run: |
+          ETIQUETA="${GITHUB_REF_NAME#v}"
+          CABECERA=$(grep -m1 -E '^\s*\*\s*Version:' ubigeo-envio-peru.php | awk '{print $NF}')
+          CONSTANTE=$(grep -m1 "UEP_VERSION'," ubigeo-envio-peru.php | sed -E "s/.*'([0-9.]+)'.*/\1/")
+          ESTABLE=$(grep -m1 -E '^Stable tag:' readme.txt | awk '{print $NF}')
+          for V in "$CABECERA" "$CONSTANTE" "$ESTABLE"; do
+            if [ "$V" != "$ETIQUETA" ]; then
+              echo "::error::La etiqueta $GITHUB_REF_NAME no coincide: Version=$CABECERA, UEP_VERSION=$CONSTANTE, Stable tag=$ESTABLE."
+              exit 1
+            fi
+          done
+          echo "VERSION=$ETIQUETA" >> "$GITHUB_ENV"
+
+      - name: Armar el ZIP instalable
+        run: git archive --format=zip --prefix=ubigeo-envio-peru/ -o "ubigeo-envio-peru-$VERSION.zip" HEAD
+
+      - name: Tomar las notas del changelog
+        run: |
+          awk -v v="= $VERSION =" '$0 == v { f = 1; next } /^= / { if (f) exit } f' readme.txt > notas.md
+          [ -s notas.md ] || echo "Versión $VERSION" > notas.md
+
+      - name: Crear la versión en GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "ubigeo-envio-peru-$VERSION.zip" --title "Versión $VERSION" --notes-file notas.md
