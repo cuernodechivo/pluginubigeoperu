@@ -36,10 +36,6 @@ Plugin de WordPress que agrega **Departamento / Provincia / Distrito** (ubigeo) 
 
 Una instalación nueva viene lista para usar con la configuración de nuestra tienda: cobertura en Lima › Lima y Callao › Callao, 51 tarifas por distrito (en la moneda base de WooCommerce), dirección y horario de recojo, y agencias Shalom y Marvisur. Si lo instalas en otra tienda, cambia esos datos en **Ajustes** y **Tarifas de envío**, o importa tu propia configuración en **Ajustes → Copia de seguridad**. Si el sitio ya tiene tarifas o ajustes guardados, no se tocan.
 
-### Si vienes de los plugins de Renzo Tejada
-
-Usa las mismas tablas de catálogo y los mismos metadatos de pedido que "Ubigeo de Perú para WooCommerce", así que los pedidos antiguos siguen mostrando su ubigeo. Desactiva los dos plugins anteriores y registra tus tarifas en **Envío Perú → Tarifas de envío**.
-
 ## Integración con ERP / API REST
 
 Cada pedido guarda:
@@ -63,10 +59,6 @@ Los mismos datos aparecen en la API REST de WooCommerce bajo la clave `uep_envio
    ```
 
 GitHub Actions comprueba que la etiqueta coincida con la versión del plugin, arma el ZIP instalable y crea la versión en **Releases** con las notas del changelog.
-
-## Créditos
-
-El catálogo de ubigeo (departamentos, provincias y distritos) proviene del plugin [Ubigeo de Perú para WooCommerce](https://renzotejada.com/ubigeo-de-peru-para-woocommerce/) de Renzo Tejada (GPL-2.0-or-later), con la provincia San Miguel (Cajamarca) corregida.
 
 ## Licencia
 

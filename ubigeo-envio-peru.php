@@ -83,21 +83,10 @@ add_action( 'admin_notices', function () {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
-	$activos  = (array) get_option( 'active_plugins', array() );
-	$antiguos = array();
-	if ( in_array( 'ubigeo-peru/ubigeo-peru.php', $activos, true ) ) {
-		$antiguos[] = 'Ubigeo de Perú para WooCommerce';
-	}
-	if ( in_array( 'costo-ubigeo-peru/costo-ubigeo-peru.php', $activos, true ) ) {
-		$antiguos[] = 'Costo de envío de Ubigeo en Perú';
-	}
-	if ( $antiguos ) {
+	$activos = (array) get_option( 'active_plugins', array() );
+	if ( in_array( 'ubigeo-peru/ubigeo-peru.php', $activos, true ) || in_array( 'costo-ubigeo-peru/costo-ubigeo-peru.php', $activos, true ) ) {
 		echo '<div class="notice notice-warning"><p><strong>Ubigeo y Envío Perú:</strong> ';
-		printf(
-			/* translators: %s: lista de plugins */
-			esc_html__( 'Detectamos que sigue(n) activo(s): %s. Desactívalo(s) para evitar campos y costos duplicados en el checkout. Este plugin reutiliza los mismos datos, no perderás nada.', 'ubigeo-envio-peru' ),
-			esc_html( implode( ', ', $antiguos ) )
-		);
+		esc_html_e( 'Hay otro plugin de ubigeo o costo de envío activo. Desactívalo en Plugins para evitar campos y costos duplicados en el checkout. Este plugin reutiliza los mismos datos, no perderás nada.', 'ubigeo-envio-peru' );
 		echo '</p></div>';
 	}
 } );

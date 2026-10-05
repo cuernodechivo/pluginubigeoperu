@@ -10,23 +10,13 @@ Ubigeo (Departamento / Provincia / Distrito) en el checkout + costo de envío po
 
 == Description ==
 
-Un solo plugin que reemplaza a la pareja "Ubigeo de Perú para WooCommerce" + "Costo de envío de Ubigeo en Perú":
+Un solo plugin para el ubigeo y los costos de envío en Perú:
 
 * Agrega los selects de Departamento, Provincia y Distrito al checkout (solo para Perú) y oculta estado/ciudad/código postal.
 * Calcula el costo de envío según la zona elegida, con reglas simples: la más específica gana (distrito → provincia → departamento → costo por defecto).
 * Envío gratis a partir de un monto del carrito (opcional) y soporte de cupones de envío gratis de WooCommerce.
 * Las direcciones de los pedidos (admin, emails, "gracias por tu compra", mi cuenta y API REST) muestran los nombres del ubigeo automáticamente.
 * Compatible con HPOS. Requiere el checkout clásico (shortcode), no el checkout por bloques.
-
-= Migración desde los plugins anteriores =
-
-Usa las mismas tablas de catálogo (wp_ubigeo_departamento / provincia / distrito) y los mismos metadatos de pedido (_billing_departamento, etc.), así que:
-
-* Los pedidos antiguos siguen mostrando su ubigeo.
-* No se duplica el catálogo.
-* Solo debes desactivar los dos plugins anteriores y registrar tus tarifas en WooCommerce → Envío Perú (el modelo de tarifas es nuevo, más simple).
-
-Además corrige un error de datos del plugin original: la provincia SAN MIGUEL (Cajamarca) faltaba y sus 12 distritos nunca aparecían en el checkout.
 
 == Installation ==
 

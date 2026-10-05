@@ -199,7 +199,7 @@ class UEP_Install {
 	}
 
 	/**
-	 * Corrige datos de instalaciones antiguas: el plugin original no incluía
+	 * Corrige catálogos antiguos que no incluían
 	 * la provincia SAN MIGUEL (Cajamarca, idProv 194) y dejaba 12 distritos
 	 * huérfanos que nunca aparecían en el checkout.
 	 */

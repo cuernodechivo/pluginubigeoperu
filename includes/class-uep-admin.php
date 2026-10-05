@@ -1736,8 +1736,8 @@ class UEP_Admin {
 			<p><strong><?php esc_html_e( '¿Qué datos recibe mi ERP?', 'ubigeo-envio-peru' ); ?></strong><br>
 			<?php esc_html_e( 'Por la API REST de pedidos: el departamento (código ISO en "state" y nombre en "departamento"), la provincia, el distrito y el servicio de envío en "uep_envio" (servicio, nombre y canal web/interno).', 'ubigeo-envio-peru' ); ?></p>
 
-			<p><strong><?php esc_html_e( '¿Vengo de los plugins "Ubigeo de Perú" + "Costo de envío de Ubigeo"?', 'ubigeo-envio-peru' ); ?></strong><br>
-			<?php esc_html_e( 'Este plugin usa las mismas tablas y los mismos campos de pedido, así que los pedidos antiguos siguen mostrando su ubigeo. Desactiva y borra los dos plugins anteriores.', 'ubigeo-envio-peru' ); ?></p>
+			<p><strong><?php esc_html_e( '¿Usaba antes otros plugins de ubigeo o costo de envío?', 'ubigeo-envio-peru' ); ?></strong><br>
+			<?php esc_html_e( 'Si tu tienda ya tenía las tablas de ubigeo (wp_ubigeo_departamento, provincia y distrito), este plugin las reutiliza y los pedidos antiguos siguen mostrando su ubigeo. Desactiva y borra los plugins anteriores para que no se dupliquen campos ni costos.', 'ubigeo-envio-peru' ); ?></p>
 		</div>
 		<?php
 	}
