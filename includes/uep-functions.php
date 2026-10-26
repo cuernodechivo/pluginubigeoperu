@@ -614,28 +614,7 @@ function uep_tarifa_a_base( $monto ) {
 		return $monto;
 	}
 
-	$tc = 0.0;
-
-	// CURCY (WooCommerce Multi Currency) free y premium.
-	foreach ( array( 'WOOMULTI_CURRENCY_F_Data', 'WOOMULTI_CURRENCY_Data' ) as $clase ) {
-		if ( $tc <= 0 && class_exists( $clase ) && method_exists( $clase, 'get_ins' ) ) {
-			$lista = $clase::get_ins()->get_list_currencies();
-			if ( isset( $lista['PEN']['rate'] ) && (float) $lista['PEN']['rate'] > 0 ) {
-				$tc = (float) $lista['PEN']['rate'];
-			}
-		}
-	}
-
-	// WOOCS - WooCommerce Currency Switcher.
-	global $WOOCS;
-	if ( $tc <= 0 && is_object( $WOOCS ) && isset( $WOOCS->currencies['PEN']['rate'] ) ) {
-		$tc = (float) $WOOCS->currencies['PEN']['rate'];
-	}
-
-	// Tipo de cambio manual de los ajustes.
-	if ( $tc <= 0 ) {
-		$tc = (float) $settings['tarifa_tc'];
-	}
+	$tc = uep_tipo_cambio_pen()['tc'];
 
 	if ( $tc <= 0 ) {
 		return $monto;
@@ -643,6 +622,63 @@ function uep_tarifa_a_base( $monto ) {
 
 	// Sin redondear: así la conversión de vuelta a soles da el monto exacto.
 	return $monto / $tc;
+}
+
+/**
+ * Soles por 1 unidad de la moneda base: del plugin de multimoneda (CURCY
+ * free/premium o WOOCS) o, si no hay ninguno, el tipo de cambio manual.
+ *
+ * @return array { tc: float, fuente: string, multimoneda: bool }
+ */
+function uep_tipo_cambio_pen() {
+	// CURCY (WooCommerce Multi Currency) free y premium.
+	foreach ( array( 'WOOMULTI_CURRENCY_F_Data', 'WOOMULTI_CURRENCY_Data' ) as $clase ) {
+		if ( class_exists( $clase ) && method_exists( $clase, 'get_ins' ) ) {
+			$lista = $clase::get_ins()->get_list_currencies();
+			if ( isset( $lista['PEN']['rate'] ) && (float) $lista['PEN']['rate'] > 0 ) {
+				return array(
+					'tc'          => (float) $lista['PEN']['rate'],
+					'fuente'      => 'WooCommerce Multi Currency',
+					'multimoneda' => true,
+				);
+			}
+		}
+	}
+
+	// WOOCS - WooCommerce Currency Switcher.
+	global $WOOCS;
+	if ( is_object( $WOOCS ) && isset( $WOOCS->currencies['PEN']['rate'] ) && (float) $WOOCS->currencies['PEN']['rate'] > 0 ) {
+		return array(
+			'tc'          => (float) $WOOCS->currencies['PEN']['rate'],
+			'fuente'      => 'WOOCS',
+			'multimoneda' => true,
+		);
+	}
+
+	// Tipo de cambio manual de los ajustes.
+	return array(
+		'tc'          => (float) uep_get_settings()['tarifa_tc'],
+		'fuente'      => __( 'tipo de cambio manual de los ajustes', 'ubigeo-envio-peru' ),
+		'multimoneda' => false,
+	);
+}
+
+/**
+ * Datos para mostrar en el panel cuánto paga en soles el cliente por una
+ * tarifa escrita en la moneda base (ej. $7.00 ≈ S/ 26.25). Solo aplica si
+ * la base no es el sol, las tarifas están en la moneda base y un plugin de
+ * multimoneda muestra los precios en soles.
+ *
+ * @return array|null { tc, fuente } o null si no hace falta mostrarlo.
+ */
+function uep_equivalencia_soles() {
+	if ( 'PEN' === get_option( 'woocommerce_currency' ) || 'PEN' === uep_get_settings()['tarifa_currency'] ) {
+		return null;
+	}
+
+	$tc = uep_tipo_cambio_pen();
+
+	return $tc['multimoneda'] && $tc['tc'] > 0 ? $tc : null;
 }
 
 /**

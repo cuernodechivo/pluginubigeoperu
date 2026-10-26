@@ -37,6 +37,9 @@ class UEP_Shipping {
 	 * el cliente eligió un ubigeo fuera de ella. Se aplica tanto en el refresco
 	 * del checkout como en el envío final del pedido.
 	 *
+	 * Si envía a una dirección diferente, se revisan las dos direcciones: con
+	 * que una quede fuera de la cobertura, esos métodos se ocultan.
+	 *
 	 * @param array $gateways Pasarelas disponibles.
 	 * @return array
 	 */
@@ -46,10 +49,21 @@ class UEP_Shipping {
 		}
 
 		$elegidos = WC()->session ? (array) WC()->session->get( 'chosen_shipping_methods', array() ) : array();
+		$gestor   = uep_es_gestor();
 
 		list( $id_depa, $id_prov, ) = self::ubigeo_actual();
+		$gateways = self::pagos_permitidos( $gateways, $id_depa, $id_prov, $elegidos, $gestor );
 
-		return self::pagos_permitidos( $gateways, $id_depa, $id_prov, $elegidos, uep_es_gestor() );
+		// Envío a otra dirección: la facturación también debe estar en la
+		// cobertura, y mientras no se elija cuenta como fuera de ella.
+		$datos = self::datos_checkout();
+
+		if ( self::envia_a_otra_direccion( $datos ) ) {
+			list( $id_depa, $id_prov, ) = self::ubigeo_de( $datos, 'billing' );
+			$gateways = self::pagos_permitidos( $gateways, $id_depa, $id_prov, $elegidos, $gestor, true );
+		}
+
+		return $gateways;
 	}
 
 	/**
@@ -61,9 +75,11 @@ class UEP_Shipping {
 	 * @param int   $id_prov   Provincia del cliente.
 	 * @param array $elegidos  IDs de las tarifas de envío elegidas.
 	 * @param bool  $es_gestor ¿Compra un administrador o gestor de la tienda?
+	 * @param bool  $exigir    Sin departamento elegido, ¿ocultar igual los
+	 *                         métodos restringidos?
 	 * @return array
 	 */
-	public static function pagos_permitidos( $gateways, $id_depa, $id_prov, $elegidos, $es_gestor ) {
+	public static function pagos_permitidos( $gateways, $id_depa, $id_prov, $elegidos, $es_gestor, $exigir = false ) {
 		$settings = uep_get_settings();
 		$elegidos = (array) $elegidos;
 
@@ -98,12 +114,13 @@ class UEP_Shipping {
 			return $gateways;
 		}
 
-		// Sin ubigeo elegido aún no se puede decidir: no ocultar nada.
-		if ( ! $id_depa ) {
+		// Sin ubigeo elegido aún no se puede decidir: no ocultar nada, salvo
+		// que se exija.
+		if ( ! $id_depa && ! $exigir ) {
 			return $gateways;
 		}
 
-		if ( uep_zona_coincide( $settings['cobertura_zonas'], $id_depa, $id_prov ) ) {
+		if ( $id_depa && uep_zona_coincide( $settings['cobertura_zonas'], $id_depa, $id_prov ) ) {
 			return $gateways;
 		}
 
@@ -174,26 +191,10 @@ class UEP_Shipping {
 	 * @return array [idDepa, idProv, idDist]
 	 */
 	public static function ubigeo_actual() {
-		$datos = array();
-
-		// Refresco AJAX del checkout.
-		if ( isset( $_POST['post_data'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
-			parse_str( wp_unslash( $_POST['post_data'] ), $datos ); // phpcs:ignore
-		} elseif ( isset( $_POST['billing_departamento'] ) || isset( $_POST['shipping_departamento'] ) ) {
-			// Envío final del pedido (place order).
-			$datos = wp_unslash( $_POST ); // phpcs:ignore
-		}
+		$datos = self::datos_checkout();
 
 		if ( $datos ) {
-			$prefijo = ! empty( $datos['ship_to_different_address'] ) && ! empty( $datos['shipping_departamento'] )
-				? 'shipping'
-				: 'billing';
-
-			$ubigeo = array(
-				absint( $datos[ $prefijo . '_departamento' ] ?? 0 ),
-				absint( $datos[ $prefijo . '_provincia' ] ?? 0 ),
-				absint( $datos[ $prefijo . '_distrito' ] ?? 0 ),
-			);
+			$ubigeo = self::ubigeo_de( $datos, self::envia_a_otra_direccion( $datos ) ? 'shipping' : 'billing' );
 
 			if ( $ubigeo[0] && WC()->session ) {
 				WC()->session->set( 'uep_ubigeo', $ubigeo );
@@ -211,6 +212,51 @@ class UEP_Shipping {
 		}
 
 		return array( 0, 0, 0 );
+	}
+
+	/**
+	 * Campos del formulario de checkout en la petición actual: del refresco
+	 * AJAX (post_data) o del envío final del pedido. Vacío fuera del checkout.
+	 *
+	 * @return array
+	 */
+	private static function datos_checkout() {
+		$datos = array();
+
+		// Refresco AJAX del checkout.
+		if ( isset( $_POST['post_data'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			parse_str( wp_unslash( $_POST['post_data'] ), $datos ); // phpcs:ignore
+		} elseif ( isset( $_POST['billing_departamento'] ) || isset( $_POST['shipping_departamento'] ) ) {
+			// Envío final del pedido (place order).
+			$datos = wp_unslash( $_POST ); // phpcs:ignore
+		}
+
+		return (array) $datos;
+	}
+
+	/**
+	 * ¿Marcó "Enviar a una dirección diferente" y eligió el departamento de envío?
+	 *
+	 * @param array $datos Campos del checkout.
+	 * @return bool
+	 */
+	private static function envia_a_otra_direccion( $datos ) {
+		return ! empty( $datos['ship_to_different_address'] ) && ! empty( $datos['shipping_departamento'] );
+	}
+
+	/**
+	 * Ubigeo de la dirección de facturación o de envío.
+	 *
+	 * @param array  $datos   Campos del checkout.
+	 * @param string $prefijo 'billing' o 'shipping'.
+	 * @return array [idDepa, idProv, idDist]
+	 */
+	private static function ubigeo_de( $datos, $prefijo ) {
+		return array(
+			absint( $datos[ $prefijo . '_departamento' ] ?? 0 ),
+			absint( $datos[ $prefijo . '_provincia' ] ?? 0 ),
+			absint( $datos[ $prefijo . '_distrito' ] ?? 0 ),
+		);
 	}
 
 	/**

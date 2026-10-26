@@ -53,21 +53,48 @@ class UEP_Admin {
 		wp_enqueue_style( 'uep-admin', UEP_PLUGIN_URL . 'assets/css/admin.css', array(), UEP_VERSION );
 		wp_enqueue_script( 'uep-admin', UEP_PLUGIN_URL . 'assets/js/admin.js', array( 'jquery' ), UEP_VERSION, true );
 
+		$settings = uep_get_settings();
+		$moneda   = 'PEN' === $settings['tarifa_currency'] ? 'S/' : get_woocommerce_currency_symbol();
+		$equiv    = uep_equivalencia_soles();
+
+		// Precios actuales por zona ("depa|prov|dist"), para avisar en el
+		// formulario cuando la zona elegida ya tiene precio.
+		$existentes = array();
+		foreach ( uep_get_tarifas() as $t ) {
+			$hay_flash = null !== $t['costo_express'] && '' !== (string) $t['costo_express'];
+
+			$existentes[ (int) $t['idDepa'] . '|' . (int) $t['idProv'] . '|' . (int) $t['idDist'] ] = array(
+				'costo' => number_format( (float) $t['costo'], 2, '.', '' ),
+				'flash' => $hay_flash ? number_format( (float) $t['costo_express'], 2, '.', '' ) : '',
+			);
+		}
+
 		wp_localize_script(
 			'uep-admin',
 			'uep_admin',
 			array(
-				'ajax_url'  => admin_url( 'admin-ajax.php' ),
-				'nonce'     => wp_create_nonce( 'uep_ubigeo' ),
-				'sim_nonce' => wp_create_nonce( 'uep_simular' ),
-				'i18n'      => array(
-					'todas_prov' => __( 'Todo el departamento', 'ubigeo-envio-peru' ),
-					'todos_dist' => __( 'Toda la provincia', 'ubigeo-envio-peru' ),
-					'elige'      => __( 'Elige…', 'ubigeo-envio-peru' ),
-					'calculando' => __( 'Calculando…', 'ubigeo-envio-peru' ),
-					'error'      => __( 'No se pudo simular. Recarga la página e inténtalo de nuevo.', 'ubigeo-envio-peru' ),
+				'ajax_url'   => admin_url( 'admin-ajax.php' ),
+				'nonce'      => wp_create_nonce( 'uep_ubigeo' ),
+				'sim_nonce'  => wp_create_nonce( 'uep_simular' ),
+				'moneda'     => $moneda,
+				'tc'         => $equiv ? $equiv['tc'] : 0,
+				'existentes' => (object) $existentes,
+				'i18n'       => array(
+					'todas_prov'   => __( 'Todo el departamento', 'ubigeo-envio-peru' ),
+					'todos_dist'   => __( 'Toda la provincia', 'ubigeo-envio-peru' ),
+					'elige'        => __( 'Elige…', 'ubigeo-envio-peru' ),
+					'calculando'   => __( 'Calculando…', 'ubigeo-envio-peru' ),
+					'error'        => __( 'No se pudo simular. Recarga la página e inténtalo de nuevo.', 'ubigeo-envio-peru' ),
 					/* translators: 1: visibles 2: total */
-					'conteo'     => __( '%1$d de %2$d tarifas', 'ubigeo-envio-peru' ),
+					'conteo'       => __( '%1$d de %2$d tarifas', 'ubigeo-envio-peru' ),
+					/* translators: %s: monto en soles */
+					'equiv'        => __( '≈ S/ %s para el cliente', 'ubigeo-envio-peru' ),
+					/* translators: 1: costo normal 2: costo Flash */
+					'existe'       => __( 'Esta zona ya tiene precio: normal %1$s, Flash %2$s. Si guardas, se reemplaza.', 'ubigeo-envio-peru' ),
+					'por_defecto'  => __( 'por defecto', 'ubigeo-envio-peru' ),
+					'guardar'      => __( 'Guardar precio', 'ubigeo-envio-peru' ),
+					'actualizar'   => __( 'Actualizar precio', 'ubigeo-envio-peru' ),
+					'salir'        => __( 'Tienes cambios sin guardar. ¿Salir de todas formas?', 'ubigeo-envio-peru' ),
 				),
 			)
 		);
@@ -170,10 +197,55 @@ class UEP_Admin {
 			return;
 		}
 
+		if ( 'tarifa_ok' === $msg && ! empty( $_GET['uep_resaltar'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			$detalle = self::detalle_tarifa( absint( $_GET['uep_resaltar'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
+
+			if ( $detalle ) {
+				/* translators: %s: zona y precios */
+				$textos['tarifa_ok'] = sprintf( __( 'Precio guardado: %s. Ya se aplica en el checkout.', 'ubigeo-envio-peru' ), $detalle );
+			}
+		}
+
 		if ( isset( $textos[ $msg ] ) ) {
 			$clase = false === strpos( $msg, 'error' ) ? 'notice-success' : 'notice-error';
 			printf( '<div class="notice %1$s is-dismissible"><p>%2$s</p></div>', esc_attr( $clase ), esc_html( $textos[ $msg ] ) );
 		}
+	}
+
+	/**
+	 * "LIMA › LIMA › MIRAFLORES — normal $7.00 (≈ S/ 26.25), Flash $14.00".
+	 *
+	 * @param int $tarifa_id ID de la tarifa.
+	 * @return string Vacío si no existe.
+	 */
+	private static function detalle_tarifa( $tarifa_id ) {
+		$settings = uep_get_settings();
+		$moneda   = 'PEN' === $settings['tarifa_currency'] ? 'S/' : get_woocommerce_currency_symbol();
+		$equiv    = uep_equivalencia_soles();
+		$texto    = function ( $monto ) use ( $moneda, $equiv ) {
+			$t = $moneda . ' ' . number_format( (float) $monto, 2 );
+			return $equiv && (float) $monto > 0 ? $t . ' (≈ S/ ' . number_format( (float) $monto * $equiv['tc'], 2 ) . ')' : $t;
+		};
+
+		foreach ( uep_get_tarifas() as $tarifa ) {
+			if ( (int) $tarifa['tarifa_id'] !== $tarifa_id ) {
+				continue;
+			}
+
+			$flash = null !== $tarifa['costo_express'] && '' !== (string) $tarifa['costo_express']
+				? $texto( $tarifa['costo_express'] )
+				: __( 'por defecto', 'ubigeo-envio-peru' );
+
+			return sprintf(
+				/* translators: 1: zona 2: costo normal 3: costo Flash */
+				__( '%1$s — normal %2$s, Flash %3$s', 'ubigeo-envio-peru' ),
+				uep_tarifa_alcance( $tarifa ),
+				$texto( $tarifa['costo'] ),
+				$flash
+			);
+		}
+
+		return '';
 	}
 
 	/* ---------------------------------------------------------------------
@@ -541,7 +613,7 @@ class UEP_Admin {
 	 *
 	 * @param array   $zonas   Zonas "idDepa|idProv".
 	 * @param array[] $tarifas Tarifas de uep_get_tarifas().
-	 * @return string[] Nombres de distrito.
+	 * @return array[] Cada distrito: idDepa, idProv, idDist, distrito.
 	 */
 	private static function distritos_sin_tarifa( $zonas, $tarifas ) {
 		$t_dist = array();
@@ -586,13 +658,18 @@ class UEP_Admin {
 
 				foreach ( uep_get_distritos( $id_prov ) as $d ) {
 					if ( ! isset( $t_dist[ (int) $d['idDist'] ] ) ) {
-						$sin[] = trim( $d['distrito'] );
+						$sin[ (int) $d['idDist'] ] = array(
+							'idDepa'   => $depa,
+							'idProv'   => $id_prov,
+							'idDist'   => (int) $d['idDist'],
+							'distrito' => trim( $d['distrito'] ),
+						);
 					}
 				}
 			}
 		}
 
-		return array_values( array_unique( $sin ) );
+		return array_values( $sin );
 	}
 
 	/**
@@ -660,7 +737,7 @@ class UEP_Admin {
 
 		// 4) Distritos de cobertura sin tarifa propia.
 		if ( $cobertura && $tarifas ) {
-			$sin = self::distritos_sin_tarifa( $settings['cobertura_zonas'], $tarifas );
+			$sin = wp_list_pluck( self::distritos_sin_tarifa( $settings['cobertura_zonas'], $tarifas ), 'distrito' );
 
 			if ( $sin ) {
 				$muestra = implode( ', ', array_slice( $sin, 0, 6 ) ) . ( count( $sin ) > 6 ? '…' : '' );
@@ -678,8 +755,8 @@ class UEP_Admin {
 						self::precio_texto( uep_tarifa_a_base( $settings['default_cost'] ) ),
 						$muestra
 					),
-					'enlace'       => self::url( 'tarifas' ),
-					'enlace_texto' => __( 'Agregar tarifas', 'ubigeo-envio-peru' ),
+					'enlace'       => self::url( 'tarifas' ) . '#uep-sin-tarifa',
+					'enlace_texto' => __( 'Ponerles precio', 'ubigeo-envio-peru' ),
 				);
 			} else {
 				$c[] = array(
@@ -919,17 +996,46 @@ class UEP_Admin {
 	 * ------------------------------------------------------------------- */
 
 	private static function render_tarifas() {
-		$tarifas  = uep_get_tarifas();
-		$settings = uep_get_settings();
-		$moneda   = 'PEN' === $settings['tarifa_currency'] ? 'S/' : get_woocommerce_currency_symbol();
+		$tarifas   = uep_get_tarifas();
+		$settings  = uep_get_settings();
+		$moneda    = 'PEN' === $settings['tarifa_currency'] ? 'S/' : get_woocommerce_currency_symbol();
+		$equiv     = uep_equivalencia_soles();
+		$resaltar  = isset( $_GET['uep_resaltar'] ) ? absint( $_GET['uep_resaltar'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+		$sin_dist  = 'yes' === $settings['cobertura_enabled'] ? self::distritos_sin_tarifa( $settings['cobertura_zonas'], $tarifas ) : array();
+		$monto_txt = function ( $monto ) use ( $moneda ) {
+			return $moneda . ' ' . number_format( (float) $monto, 2 );
+		};
 		?>
 		<div class="uep-card">
-			<h2><?php esc_html_e( 'Agregar o actualizar una tarifa', 'ubigeo-envio-peru' ); ?></h2>
+			<h2><?php esc_html_e( 'Agregar o cambiar un precio', 'ubigeo-envio-peru' ); ?></h2>
 			<p class="description">
-				<?php esc_html_e( 'Elige solo el departamento para cubrirlo entero, o afina por provincia y distrito. La regla más específica gana: distrito → provincia → departamento → costo por defecto.', 'ubigeo-envio-peru' ); ?>
+				<?php esc_html_e( 'Elige solo el departamento para cubrirlo entero, o afina por provincia y distrito. Si la zona ya tiene precio, se reemplaza.', 'ubigeo-envio-peru' ); ?>
 			</p>
 
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="uep-form-tarifa">
+			<details class="uep-explica">
+				<summary><?php esc_html_e( '¿Cómo se decide el precio de un distrito?', 'ubigeo-envio-peru' ); ?></summary>
+				<p><?php esc_html_e( 'Gana siempre el precio más específico: primero el del distrito, si no hay, el de su provincia, después el del departamento y, al final, el costo por defecto de Ajustes.', 'ubigeo-envio-peru' ); ?></p>
+				<p><?php echo esc_html( sprintf( __( 'Ejemplo: si pones LIMA › LIMA (toda la provincia) = %1$s y LIMA › LIMA › MIRAFLORES = %2$s, Miraflores cobra %2$s y los demás distritos de Lima cobran %1$s.', 'ubigeo-envio-peru' ), $monto_txt( 7 ), $monto_txt( 5 ) ) ); ?></p>
+				<p><?php esc_html_e( 'El costo Flash es opcional: si lo dejas vacío, esa zona usa el costo Flash por defecto de Ajustes.', 'ubigeo-envio-peru' ); ?></p>
+			</details>
+
+			<?php if ( $equiv ) : ?>
+				<p class="uep-nota-moneda">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: 1: moneda base 2: fuente del tipo de cambio 3: tipo de cambio */
+							__( 'Los precios se escriben en %1$s. Tus clientes los ven en soles con el tipo de cambio de %2$s (1 %1$s = S/ %3$s); debajo de cada precio verás cuánto es en soles.', 'ubigeo-envio-peru' ),
+							get_option( 'woocommerce_currency' ),
+							$equiv['fuente'],
+							number_format( $equiv['tc'], 2 )
+						)
+					);
+					?>
+				</p>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="uep-form-tarifa" id="uep-form-tarifa">
 				<?php wp_nonce_field( 'uep_guardar_tarifa' ); ?>
 				<input type="hidden" name="action" value="uep_guardar_tarifa">
 
@@ -960,27 +1066,64 @@ class UEP_Admin {
 
 					<label>
 						<span><?php echo esc_html( sprintf( __( 'Costo normal (%s)', 'ubigeo-envio-peru' ), $moneda ) ); ?> *</span>
-						<input type="number" name="costo" step="0.01" min="0" required placeholder="0.00">
+						<input type="number" name="costo" id="uep_costo" step="0.01" min="0" required placeholder="0.00" data-uep-equiv>
 					</label>
 
 					<label>
 						<span><?php echo esc_html( sprintf( __( 'Costo Flash (%s, opcional)', 'ubigeo-envio-peru' ), $moneda ) ); ?></span>
-						<input type="number" name="costo_express" step="0.01" min="0" placeholder="<?php esc_attr_e( 'Usa el Flash por defecto', 'ubigeo-envio-peru' ); ?>">
+						<input type="number" name="costo_express" id="uep_costo_express" step="0.01" min="0" placeholder="<?php esc_attr_e( 'Usa el Flash por defecto', 'ubigeo-envio-peru' ); ?>" data-uep-equiv>
 					</label>
 
 					<div class="uep-submit">
-						<button type="submit" class="button button-primary"><?php esc_html_e( 'Guardar tarifa', 'ubigeo-envio-peru' ); ?></button>
+						<button type="submit" class="button button-primary" id="uep_guardar_tarifa"><?php esc_html_e( 'Guardar precio', 'ubigeo-envio-peru' ); ?></button>
 					</div>
 				</div>
+
+				<p id="uep_tarifa_existente" class="uep-aviso-existente" hidden></p>
 			</form>
 		</div>
 
+		<?php if ( $sin_dist ) : ?>
+			<div class="uep-card uep-card-alerta" id="uep-sin-tarifa">
+				<h2>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %d: cantidad */
+							_n( '%d distrito de tu cobertura no tiene precio propio', '%d distritos de tu cobertura no tienen precio propio', count( $sin_dist ), 'ubigeo-envio-peru' ),
+							count( $sin_dist )
+						)
+					);
+					?>
+				</h2>
+				<p class="description">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: costo por defecto */
+							__( 'Hoy cobran el costo por defecto (%s). Haz clic en un distrito para ponerle su precio: se llena el formulario de arriba.', 'ubigeo-envio-peru' ),
+							$monto_txt( $settings['default_cost'] )
+						)
+					);
+					?>
+				</p>
+				<p class="uep-chips">
+					<?php foreach ( $sin_dist as $d ) : ?>
+						<button type="button" class="button button-small uep-agregar-dist"
+								data-depa="<?php echo (int) $d['idDepa']; ?>" data-prov="<?php echo (int) $d['idProv']; ?>" data-dist="<?php echo (int) $d['idDist']; ?>">
+							<?php echo esc_html( $d['distrito'] ); ?>
+						</button>
+					<?php endforeach; ?>
+				</p>
+			</div>
+		<?php endif; ?>
+
 		<div class="uep-card">
-			<h2><?php esc_html_e( 'Tarifas configuradas', 'ubigeo-envio-peru' ); ?></h2>
+			<h2><?php esc_html_e( 'Precios configurados', 'ubigeo-envio-peru' ); ?></h2>
 
 			<?php if ( ! $tarifas ) : ?>
 				<p><?php esc_html_e( 'Aún no hay tarifas. Mientras tanto, todos los envíos usan el costo por defecto:', 'ubigeo-envio-peru' ); ?>
-					<strong><?php echo esc_html( $moneda . ' ' . number_format( (float) $settings['default_cost'], 2 ) ); ?></strong>
+					<strong><?php echo esc_html( $monto_txt( $settings['default_cost'] ) ); ?></strong>
 				</p>
 			<?php else : ?>
 				<p class="uep-buscador">
@@ -989,6 +1132,7 @@ class UEP_Admin {
 						   placeholder="<?php esc_attr_e( 'Buscar distrito, provincia o departamento…', 'ubigeo-envio-peru' ); ?>">
 					<span id="uep_buscar_conteo" class="description"></span>
 				</p>
+				<p class="description"><?php esc_html_e( 'Para cambiar un precio, pulsa "Editar" en su fila, escribe el nuevo valor y pulsa "Guardar".', 'ubigeo-envio-peru' ); ?></p>
 				<table class="widefat striped uep-tabla">
 					<thead>
 						<tr>
@@ -1016,26 +1160,37 @@ class UEP_Admin {
 								'uep_eliminar_tarifa_' . $tid
 							);
 							?>
-							<tr>
-								<td><?php echo esc_html( uep_tarifa_alcance( $tarifa ) ); ?></td>
+							<tr id="uep-tarifa-<?php echo esc_attr( $tid ); ?>" class="<?php echo $resaltar === $tid ? 'uep-resaltada' : ''; ?>">
+								<td>
+									<?php echo esc_html( uep_tarifa_alcance( $tarifa ) ); ?>
+									<?php if ( $resaltar === $tid ) : ?>
+										<span class="uep-etiqueta uep-etiqueta-ok"><?php esc_html_e( 'Guardado', 'ubigeo-envio-peru' ); ?></span>
+									<?php endif; ?>
+								</td>
 								<td class="uep-col-costo">
-									<span class="uep-ver"><?php echo esc_html( $moneda . ' ' . number_format( (float) $tarifa['costo'], 2 ) ); ?></span>
-									<input class="uep-campo-edicion" type="number" step="0.01" min="0" required
+									<span class="uep-ver">
+										<?php echo esc_html( $monto_txt( $tarifa['costo'] ) ); ?>
+										<?php self::equivalencia_html( $tarifa['costo'], $equiv ); ?>
+									</span>
+									<input class="uep-campo-edicion" type="number" step="0.01" min="0" required data-uep-equiv
 										   name="costo" form="<?php echo esc_attr( $form_id ); ?>"
+										   aria-label="<?php esc_attr_e( 'Costo normal', 'ubigeo-envio-peru' ); ?>"
 										   value="<?php echo esc_attr( number_format( (float) $tarifa['costo'], 2, '.', '' ) ); ?>">
 								</td>
 								<td class="uep-col-costo">
 									<span class="uep-ver">
 										<?php
 										if ( $hay_flash ) {
-											echo esc_html( $moneda . ' ' . number_format( (float) $tarifa['costo_express'], 2 ) );
+											echo esc_html( $monto_txt( $tarifa['costo_express'] ) );
+											self::equivalencia_html( $tarifa['costo_express'], $equiv );
 										} else {
 											echo '<span class="description">' . esc_html__( 'por defecto', 'ubigeo-envio-peru' ) . '</span>';
 										}
 										?>
 									</span>
-									<input class="uep-campo-edicion" type="number" step="0.01" min="0"
+									<input class="uep-campo-edicion" type="number" step="0.01" min="0" data-uep-equiv
 										   name="costo_express" form="<?php echo esc_attr( $form_id ); ?>"
+										   aria-label="<?php esc_attr_e( 'Costo Flash', 'ubigeo-envio-peru' ); ?>"
 										   value="<?php echo $hay_flash ? esc_attr( number_format( (float) $tarifa['costo_express'], 2, '.', '' ) ) : ''; ?>"
 										   placeholder="<?php esc_attr_e( 'por defecto', 'ubigeo-envio-peru' ); ?>">
 								</td>
@@ -1048,7 +1203,7 @@ class UEP_Admin {
 									<a href="#" class="uep-cancelar uep-accion-edicion"><?php esc_html_e( 'Cancelar', 'ubigeo-envio-peru' ); ?></a>
 									<a href="<?php echo esc_url( $url_eliminar ); ?>"
 									   class="uep-eliminar"
-									   onclick="return confirm('<?php echo esc_js( __( '¿Eliminar esta tarifa?', 'ubigeo-envio-peru' ) ); ?>');">
+									   onclick="return confirm('<?php echo esc_js( sprintf( __( '¿Eliminar el precio de %s? Esa zona pasará a cobrar el precio de su provincia, departamento o el costo por defecto.', 'ubigeo-envio-peru' ), uep_tarifa_alcance( $tarifa ) ) ); ?>');">
 										<?php esc_html_e( 'Eliminar', 'ubigeo-envio-peru' ); ?>
 									</a>
 								</td>
@@ -1069,10 +1224,12 @@ class UEP_Admin {
 		</div>
 
 		<div class="uep-card">
-			<h2><?php esc_html_e( 'Exportar / Importar tarifas (CSV)', 'ubigeo-envio-peru' ); ?></h2>
-			<p class="description">
-				<?php esc_html_e( 'Columnas: departamento, provincia, distrito, costo_normal, costo_flash. Deja provincia/distrito vacíos para reglas de zona amplia, y costo_flash vacío para usar el Flash por defecto. Los nombres deben ser los del catálogo (usa la exportación como plantilla).', 'ubigeo-envio-peru' ); ?>
-			</p>
+			<h2><?php esc_html_e( 'Cambiar muchos precios a la vez (Excel / CSV)', 'ubigeo-envio-peru' ); ?></h2>
+			<ol class="uep-pasos">
+				<li><?php esc_html_e( 'Pulsa "Exportar tarifas a CSV": descarga tus precios actuales.', 'ubigeo-envio-peru' ); ?></li>
+				<li><?php esc_html_e( 'Ábrelo en Excel o Google Sheets y cambia las columnas costo_normal y costo_flash (vacío = Flash por defecto). Para agregar zonas, copia una fila y cambia los nombres; deben escribirse igual que en el catálogo.', 'ubigeo-envio-peru' ); ?></li>
+				<li><?php esc_html_e( 'Guarda como CSV e impórtalo aquí. Las zonas que ya existen se actualizan; las nuevas se agregan.', 'ubigeo-envio-peru' ); ?></li>
+			</ol>
 
 			<p>
 				<a class="button" href="<?php echo esc_url( wp_nonce_url( add_query_arg( 'action', 'uep_exportar_csv', admin_url( 'admin-post.php' ) ), 'uep_exportar_csv' ) ); ?>">
@@ -1090,6 +1247,20 @@ class UEP_Admin {
 		<?php
 	}
 
+	/**
+	 * Imprime "≈ S/ 26.25" bajo un precio en la moneda base.
+	 *
+	 * @param float      $monto Monto en la moneda base.
+	 * @param array|null $equiv Datos de uep_equivalencia_soles().
+	 */
+	private static function equivalencia_html( $monto, $equiv ) {
+		if ( ! $equiv || (float) $monto <= 0 ) {
+			return;
+		}
+
+		printf( '<span class="uep-equiv">≈ S/ %s</span>', esc_html( number_format( (float) $monto * $equiv['tc'], 2 ) ) );
+	}
+
 	/* ---------------------------------------------------------------------
 	 * Pestaña: Ajustes
 	 * ------------------------------------------------------------------- */
@@ -1099,7 +1270,7 @@ class UEP_Admin {
 		$moneda   = 'PEN' === $settings['tarifa_currency'] ? 'S/' : get_woocommerce_currency_symbol();
 		?>
 		<div class="uep-card">
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="uep-form-ajustes">
 				<?php wp_nonce_field( 'uep_guardar_ajustes' ); ?>
 				<input type="hidden" name="action" value="uep_guardar_ajustes">
 
@@ -1149,7 +1320,7 @@ class UEP_Admin {
 					<tr>
 						<th scope="row"><label for="uep_default_cost"><?php echo esc_html( sprintf( __( 'Costo por defecto (%s)', 'ubigeo-envio-peru' ), $moneda ) ); ?></label></th>
 						<td>
-							<input type="number" step="0.01" min="0" id="uep_default_cost" name="default_cost"
+							<input type="number" step="0.01" min="0" id="uep_default_cost" data-uep-equiv name="default_cost"
 								   value="<?php echo esc_attr( $settings['default_cost'] ); ?>">
 							<p class="description"><?php esc_html_e( 'Se cobra cuando la zona elegida no tiene una tarifa configurada.', 'ubigeo-envio-peru' ); ?></p>
 						</td>
@@ -1157,7 +1328,7 @@ class UEP_Admin {
 					<tr>
 						<th scope="row"><label for="uep_free_over"><?php echo esc_html( sprintf( __( 'Envío gratis desde (%s)', 'ubigeo-envio-peru' ), $moneda ) ); ?></label></th>
 						<td>
-							<input type="number" step="0.01" min="0" id="uep_free_over" name="free_over"
+							<input type="number" step="0.01" min="0" id="uep_free_over" data-uep-equiv name="free_over"
 								   value="<?php echo esc_attr( $settings['free_over'] ); ?>">
 							<p class="description"><?php esc_html_e( 'Si el carrito llega a este monto, el envío normal es gratis (el Flash mantiene su precio). Deja 0 para desactivarlo.', 'ubigeo-envio-peru' ); ?></p>
 						</td>
@@ -1193,6 +1364,7 @@ class UEP_Admin {
 							<p class="description"><?php esc_html_e( 'Ej.: LIMA › LIMA y CALLAO › CALLAO = Lima Metropolitana y Callao tienen envío a domicilio; el resto va por agencia.', 'ubigeo-envio-peru' ); ?></p>
 						</td>
 					</tr>
+					<?php self::fila_vista( 'domicilio', $settings ); ?>
 				</table>
 				</section>
 
@@ -1220,7 +1392,7 @@ class UEP_Admin {
 					<tr>
 						<th scope="row"><label for="uep_express_default_cost"><?php echo esc_html( sprintf( __( 'Costo Flash por defecto (%s)', 'ubigeo-envio-peru' ), $moneda ) ); ?></label></th>
 						<td>
-							<input type="number" step="0.01" min="0" id="uep_express_default_cost" name="express_default_cost"
+							<input type="number" step="0.01" min="0" id="uep_express_default_cost" data-uep-equiv name="express_default_cost"
 								   value="<?php echo esc_attr( $settings['express_default_cost'] ); ?>">
 							<p class="description"><?php esc_html_e( 'Se usa en las zonas que no tengan un costo Flash propio. Déjalo vacío para ofrecer el Flash solo en las zonas donde definas su costo.', 'ubigeo-envio-peru' ); ?></p>
 						</td>
@@ -1232,6 +1404,7 @@ class UEP_Admin {
 							<p class="description"><?php esc_html_e( 'Hora límite del envío el mismo día. Pasada esta hora el Flash sigue visible, pero con el aviso: "se envía el mismo día solo en compras antes de las [hora]". Déjalo vacío para no mostrar ningún aviso.', 'ubigeo-envio-peru' ); ?></p>
 						</td>
 					</tr>
+					<?php self::fila_vista( 'flash', $settings ); ?>
 				</table>
 				</section>
 
@@ -1320,11 +1493,19 @@ class UEP_Admin {
 					<tr>
 						<th scope="row"><label for="uep_pickup_holidays"><?php esc_html_e( 'Feriados (recojo)', 'ubigeo-envio-peru' ); ?></label></th>
 						<td>
-							<textarea id="uep_pickup_holidays" name="pickup_holidays" rows="3" class="large-text"
-									  placeholder="2026-07-28, 2026-07-29, 2026-12-25"><?php echo esc_textarea( $settings['pickup_holidays'] ); ?></textarea>
-							<p class="description"><?php esc_html_e( 'Fechas exactas sin atención, en formato AAAA-MM-DD, separadas por comas o líneas.', 'ubigeo-envio-peru' ); ?></p>
+							<div class="uep-repetidor" data-tipo="fechas"
+								 data-placeholder="<?php esc_attr_e( 'Fecha del feriado', 'ubigeo-envio-peru' ); ?>"
+								 data-agregar="<?php esc_attr_e( '+ Agregar feriado', 'ubigeo-envio-peru' ); ?>"
+								 data-quitar="<?php esc_attr_e( 'Quitar', 'ubigeo-envio-peru' ); ?>"
+								 data-vacio="<?php esc_attr_e( 'Sin feriados: se atiende todos los días de atención.', 'ubigeo-envio-peru' ); ?>"
+								 data-pasado="<?php esc_attr_e( 'ya pasó', 'ubigeo-envio-peru' ); ?>">
+								<textarea id="uep_pickup_holidays" name="pickup_holidays" rows="3" class="large-text"
+										  placeholder="2026-07-28, 2026-07-29, 2026-12-25"><?php echo esc_textarea( $settings['pickup_holidays'] ); ?></textarea>
+							</div>
+							<p class="description"><?php esc_html_e( 'Días puntuales en que no se puede recoger (ej. 28 de julio, Navidad). El calendario del cliente no permitirá elegirlos.', 'ubigeo-envio-peru' ); ?></p>
 						</td>
 					</tr>
+					<?php self::fila_vista( 'recojo', $settings ); ?>
 				</table>
 				</section>
 
@@ -1343,8 +1524,14 @@ class UEP_Admin {
 					<tr>
 						<th scope="row"><label for="uep_agencia_list"><?php esc_html_e( 'Agencias disponibles', 'ubigeo-envio-peru' ); ?></label></th>
 						<td>
-							<textarea id="uep_agencia_list" name="agencia_list" rows="3" class="regular-text"><?php echo esc_textarea( $settings['agencia_list'] ); ?></textarea>
-							<p class="description"><?php esc_html_e( 'Una agencia por línea (ej. Shalom, Olva Courier). El cliente elegirá una y escribirá la sede donde recogerá su pedido.', 'ubigeo-envio-peru' ); ?></p>
+							<div class="uep-repetidor" data-tipo="lineas"
+								 data-agregar="<?php esc_attr_e( '+ Agregar agencia', 'ubigeo-envio-peru' ); ?>"
+								 data-quitar="<?php esc_attr_e( 'Quitar', 'ubigeo-envio-peru' ); ?>"
+								 data-vacio="<?php esc_attr_e( 'Sin agencias: solo se podrá escribir una en "Otro".', 'ubigeo-envio-peru' ); ?>"
+								 data-placeholder="<?php esc_attr_e( 'Ej.: Olva Courier', 'ubigeo-envio-peru' ); ?>">
+								<textarea id="uep_agencia_list" name="agencia_list" rows="3" class="regular-text"><?php echo esc_textarea( $settings['agencia_list'] ); ?></textarea>
+							</div>
+							<p class="description"><?php esc_html_e( 'Aparecen en la lista "Agencia de tu preferencia" del pedido, junto con la opción "Otro (escribir)".', 'ubigeo-envio-peru' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -1356,98 +1543,86 @@ class UEP_Admin {
 							<p class="description"><?php esc_html_e( 'Se muestra en el checkout, el pedido y los emails cuando el cliente elige envío por agencia.', 'ubigeo-envio-peru' ); ?></p>
 						</td>
 					</tr>
+					<?php self::fila_vista( 'agencia', $settings ); ?>
 				</table>
 				</section>
 
 				<section class="uep-seccion" id="uep-sec-pagos">
 					<h2 class="uep-seccion-titulo"><?php esc_html_e( 'Métodos de pago', 'ubigeo-envio-peru' ); ?></h2>
-					<p class="uep-seccion-intro"><?php esc_html_e( 'Quién puede pagar con qué. Las reglas se aplican en este orden: 1) solo administradores, 2) recojo en tienda, 3) solo en zonas de cobertura.', 'ubigeo-envio-peru' ); ?></p>
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row"><?php esc_html_e( 'Pagos solo para administradores', 'ubigeo-envio-peru' ); ?></th>
-						<td>
-							<?php
-							$solo_admin  = (array) $settings['pago_solo_admin'];
-							$gws_admin   = class_exists( 'WooCommerce' ) && WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
-
-							if ( $gws_admin ) :
-								foreach ( $gws_admin as $gateway ) :
-									// Se listan también las pasarelas desactivadas para que la
-									// selección no se pierda si se apagan temporalmente.
-									$inactiva = 'yes' !== $gateway->enabled;
-									?>
-									<label style="display:block;margin-bottom:4px;">
-										<input type="checkbox" name="pago_solo_admin[]" value="<?php echo esc_attr( $gateway->id ); ?>"
-											<?php checked( in_array( $gateway->id, $solo_admin, true ) ); ?>>
-										<?php echo esc_html( $gateway->get_title() ); ?>
-										<?php if ( $inactiva ) : ?>
-											<span class="description"><?php esc_html_e( '(desactivado en WooCommerce)', 'ubigeo-envio-peru' ); ?></span>
-										<?php endif; ?>
-									</label>
-								<?php endforeach; ?>
-								<p class="description"><?php esc_html_e( 'Los métodos marcados desaparecen del checkout para los clientes: solo los ven los administradores y gestores de la tienda (útil para el link de pago u otros métodos internos). En el panel de administración siguen disponibles al crear pedidos a mano.', 'ubigeo-envio-peru' ); ?></p>
-							<?php else : ?>
-								<p class="description"><?php esc_html_e( 'No hay métodos de pago activos.', 'ubigeo-envio-peru' ); ?></p>
-							<?php endif; ?>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><?php esc_html_e( 'Pagos permitidos para el recojo', 'ubigeo-envio-peru' ); ?></th>
-						<td>
-							<?php
-							$pago_recojo = (array) $settings['pago_recojo'];
-							$gws_recojo  = class_exists( 'WooCommerce' ) && WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
-
-							if ( $gws_recojo ) :
-								foreach ( $gws_recojo as $gateway ) :
-									// Se listan también las pasarelas desactivadas para que la
-									// selección no se pierda si se apagan temporalmente.
-									$inactiva = 'yes' !== $gateway->enabled;
-									?>
-									<label style="display:block;margin-bottom:4px;">
-										<input type="checkbox" name="pago_recojo[]" value="<?php echo esc_attr( $gateway->id ); ?>"
-											<?php checked( in_array( $gateway->id, $pago_recojo, true ) ); ?>>
-										<?php echo esc_html( $gateway->get_title() ); ?>
-										<?php if ( $inactiva ) : ?>
-											<span class="description"><?php esc_html_e( '(desactivado en WooCommerce)', 'ubigeo-envio-peru' ); ?></span>
-										<?php endif; ?>
-									</label>
-								<?php endforeach; ?>
-								<p class="description"><?php esc_html_e( 'Si marcas alguno, los clientes que elijan Recojo en Tienda solo podrán pagar con esos métodos. Sin marcar ninguno, se aceptan todos.', 'ubigeo-envio-peru' ); ?></p>
-							<?php else : ?>
-								<p class="description"><?php esc_html_e( 'No hay métodos de pago activos.', 'ubigeo-envio-peru' ); ?></p>
-							<?php endif; ?>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><?php esc_html_e( 'Pagos solo en cobertura', 'ubigeo-envio-peru' ); ?></th>
-						<td>
-							<?php
-							$restringidos = (array) $settings['pago_solo_cobertura'];
-							$gateways     = class_exists( 'WooCommerce' ) && WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
-
-							if ( $gateways ) :
-								foreach ( $gateways as $gateway ) :
-									// Se listan también las pasarelas desactivadas para que la
-									// selección no se pierda si se apagan temporalmente.
-									$inactiva = 'yes' !== $gateway->enabled;
-									?>
-									<label style="display:block;margin-bottom:4px;">
-										<input type="checkbox" name="pago_solo_cobertura[]" value="<?php echo esc_attr( $gateway->id ); ?>"
-											<?php checked( in_array( $gateway->id, $restringidos, true ) ); ?>>
-										<?php echo esc_html( $gateway->get_title() ); ?>
-										<?php if ( $inactiva ) : ?>
-											<span class="description"><?php esc_html_e( '(desactivado en WooCommerce)', 'ubigeo-envio-peru' ); ?></span>
-										<?php endif; ?>
-									</label>
-								<?php endforeach; ?>
-								<p class="description"><?php esc_html_e( 'Los métodos marcados solo se mostrarán a clientes dentro de las zonas de cobertura (ej. marca "Contra entrega" para que solo Lima Metropolitana y Callao lo vean).', 'ubigeo-envio-peru' ); ?></p>
-							<?php else : ?>
-								<p class="description"><?php esc_html_e( 'No hay métodos de pago activos.', 'ubigeo-envio-peru' ); ?></p>
-							<?php endif; ?>
-						</td>
-					</tr>
-				</table>
+					<p class="uep-seccion-intro"><?php esc_html_e( 'Marca dónde se puede usar cada método. En Lima y Callao (envío a domicilio y Flash) aparecen todos los métodos activos, salvo los que son solo del equipo.', 'ubigeo-envio-peru' ); ?></p>
+					<?php
+					$gateways     = class_exists( 'WooCommerce' ) && WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
+					$solo_cob     = (array) $settings['pago_solo_cobertura'];
+					$pago_recojo  = (array) $settings['pago_recojo'];
+					$solo_admin   = (array) $settings['pago_solo_admin'];
+					$recojo_todos = ! $pago_recojo;
+					?>
+					<?php if ( $gateways ) : ?>
+						<input type="hidden" name="pagos_matriz" value="1">
+						<div class="uep-matriz-wrap">
+							<table class="widefat uep-matriz-pagos">
+								<thead>
+									<tr>
+										<th scope="col"><?php esc_html_e( 'Método de pago', 'ubigeo-envio-peru' ); ?></th>
+										<th scope="col" class="uep-col-check">
+											<?php esc_html_e( 'Provincias', 'ubigeo-envio-peru' ); ?>
+											<span><?php esc_html_e( 'envío por agencia', 'ubigeo-envio-peru' ); ?></span>
+										</th>
+										<th scope="col" class="uep-col-check">
+											<?php esc_html_e( 'Recojo en tienda', 'ubigeo-envio-peru' ); ?>
+											<span><?php esc_html_e( 'únicos aceptados', 'ubigeo-envio-peru' ); ?></span>
+										</th>
+										<th scope="col" class="uep-col-check">
+											<?php esc_html_e( 'Solo el equipo', 'ubigeo-envio-peru' ); ?>
+											<span><?php esc_html_e( 'los clientes no lo ven', 'ubigeo-envio-peru' ); ?></span>
+										</th>
+									</tr>
+								</thead>
+								<tbody>
+									<?php foreach ( $gateways as $gateway ) : ?>
+										<?php
+										$gid    = $gateway->id;
+										$titulo = '' !== trim( wp_strip_all_tags( (string) $gateway->get_title() ) ) ? wp_strip_all_tags( $gateway->get_title() ) : $gid;
+										?>
+										<tr class="<?php echo in_array( $gid, $solo_admin, true ) ? 'uep-solo-equipo' : ''; ?>">
+											<th scope="row">
+												<?php echo esc_html( $titulo ); ?>
+												<?php if ( 'yes' !== $gateway->enabled ) : ?>
+													<span class="uep-etiqueta-gris"><?php esc_html_e( 'desactivado en WooCommerce', 'ubigeo-envio-peru' ); ?></span>
+												<?php endif; ?>
+											</th>
+											<td class="uep-col-check">
+												<input type="checkbox" name="pagos[<?php echo esc_attr( $gid ); ?>][agencia]" value="1"
+													   aria-label="<?php echo esc_attr( sprintf( __( '%s en provincias', 'ubigeo-envio-peru' ), $titulo ) ); ?>"
+													<?php checked( ! in_array( $gid, $solo_cob, true ) ); ?>>
+											</td>
+											<td class="uep-col-check">
+												<input type="checkbox" name="pagos[<?php echo esc_attr( $gid ); ?>][recojo]" value="1" class="uep-check-recojo"
+													   aria-label="<?php echo esc_attr( sprintf( __( '%s en recojo en tienda', 'ubigeo-envio-peru' ), $titulo ) ); ?>"
+													<?php checked( $recojo_todos || in_array( $gid, $pago_recojo, true ) ); ?>>
+											</td>
+											<td class="uep-col-check">
+												<input type="checkbox" name="pagos[<?php echo esc_attr( $gid ); ?>][equipo]" value="1" class="uep-check-equipo"
+													   aria-label="<?php echo esc_attr( sprintf( __( '%s solo para el equipo', 'ubigeo-envio-peru' ), $titulo ) ); ?>"
+													<?php checked( in_array( $gid, $solo_admin, true ) ); ?>>
+											</td>
+										</tr>
+									<?php endforeach; ?>
+								</tbody>
+							</table>
+						</div>
+						<p class="uep-aviso-recojo" hidden><?php esc_html_e( 'No marcaste ningún método para el recojo: así se aceptan todos.', 'ubigeo-envio-peru' ); ?></p>
+						<ul class="uep-matriz-ayuda">
+							<li><strong><?php esc_html_e( 'Provincias:', 'ubigeo-envio-peru' ); ?></strong> <?php esc_html_e( 'desmarca los métodos que solo funcionan en Lima y Callao, como el pago contra entrega. Si el cliente marca "Enviar a una dirección diferente", la facturación y el envío deben estar las dos en Lima o Callao para verlos.', 'ubigeo-envio-peru' ); ?></li>
+							<li><strong><?php esc_html_e( 'Recojo en tienda:', 'ubigeo-envio-peru' ); ?></strong> <?php esc_html_e( 'cuando el cliente elige recoger, solo puede pagar con los métodos marcados en esta columna.', 'ubigeo-envio-peru' ); ?></li>
+							<li><strong><?php esc_html_e( 'Solo el equipo:', 'ubigeo-envio-peru' ); ?></strong> <?php esc_html_e( 'el método desaparece para los clientes en todo el checkout (ej. link de pago). Solo lo ven administradores y gestores al registrar pedidos.', 'ubigeo-envio-peru' ); ?></li>
+						</ul>
+						<?php if ( 'yes' !== $settings['cobertura_enabled'] ) : ?>
+							<p class="description"><?php esc_html_e( 'La columna "Provincias" no tiene efecto mientras la cobertura del envío a domicilio esté desactivada.', 'ubigeo-envio-peru' ); ?></p>
+						<?php endif; ?>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'No hay métodos de pago en WooCommerce.', 'ubigeo-envio-peru' ); ?></p>
+					<?php endif; ?>
 				</section>
 
 				<section class="uep-seccion" id="uep-sec-interno">
@@ -1457,9 +1632,16 @@ class UEP_Admin {
 					<tr>
 						<th scope="row"><label for="uep_admin_metodos"><?php esc_html_e( 'Métodos solo para administradores', 'ubigeo-envio-peru' ); ?></label></th>
 						<td>
-							<textarea id="uep_admin_metodos" name="admin_metodos" rows="3" class="large-text"><?php echo esc_textarea( $settings['admin_metodos'] ); ?></textarea>
+							<div class="uep-repetidor" data-tipo="metodos"
+								 data-agregar="<?php esc_attr_e( '+ Agregar método', 'ubigeo-envio-peru' ); ?>"
+								 data-quitar="<?php esc_attr_e( 'Quitar', 'ubigeo-envio-peru' ); ?>"
+								 data-vacio="<?php esc_attr_e( 'Sin métodos internos.', 'ubigeo-envio-peru' ); ?>"
+								 data-placeholder="<?php esc_attr_e( 'Nombre, ej.: Flex Mercado Libre', 'ubigeo-envio-peru' ); ?>"
+								 data-costo="<?php echo esc_attr( sprintf( __( 'Costo (%s)', 'ubigeo-envio-peru' ), $moneda ) ); ?>">
+								<textarea id="uep_admin_metodos" name="admin_metodos" rows="3" class="large-text"><?php echo esc_textarea( $settings['admin_metodos'] ); ?></textarea>
+							</div>
 							<p class="description">
-								<?php esc_html_e( 'Un método por línea, con el formato "Nombre | costo" (el costo es opcional; sin él vale 0). Estos métodos solo los ven los administradores y gestores de la tienda al registrar pedidos a mano (ej. ventas de Mercado Libre), en cualquier zona del país. Deja el campo vacío para no ofrecer ninguno.', 'ubigeo-envio-peru' ); ?>
+								<?php esc_html_e( 'Envíos que solo ven los administradores y gestores al registrar pedidos a mano (ej. ventas de Mercado Libre), en cualquier zona del país. El costo es opcional: vacío = gratis.', 'ubigeo-envio-peru' ); ?>
 							</p>
 						</td>
 					</tr>
@@ -1485,7 +1667,9 @@ class UEP_Admin {
 
 				<div class="uep-guardar-barra">
 					<?php submit_button( __( 'Guardar ajustes', 'ubigeo-envio-peru' ), 'primary', 'submit', false ); ?>
-					<span class="description"><?php esc_html_e( 'Los cambios se aplican al instante en el checkout.', 'ubigeo-envio-peru' ); ?></span>
+					<span class="description uep-estado-guardado"
+						  data-sin-cambios="<?php esc_attr_e( 'Los cambios se aplican al instante en el checkout.', 'ubigeo-envio-peru' ); ?>"
+						  data-con-cambios="<?php esc_attr_e( 'Tienes cambios sin guardar.', 'ubigeo-envio-peru' ); ?>"><?php esc_html_e( 'Los cambios se aplican al instante en el checkout.', 'ubigeo-envio-peru' ); ?></span>
 				</div>
 			</form>
 		</div>
@@ -1512,6 +1696,65 @@ class UEP_Admin {
 				</button>
 			</form>
 		</div>
+		<?php
+	}
+
+	/**
+	 * Fila "Así lo verá el cliente": imita la opción de envío del checkout y
+	 * se actualiza mientras se escriben los nombres (admin.js).
+	 *
+	 * @param string $tipo     domicilio | flash | recojo | agencia.
+	 * @param array  $settings Ajustes.
+	 */
+	private static function fila_vista( $tipo, $settings ) {
+		$defectos = array(
+			'method_title'  => __( 'Envío a domicilio (1 a 2 días hábiles)', 'ubigeo-envio-peru' ),
+			'express_title' => __( 'Envío Flash (mismo día / 24 horas)', 'ubigeo-envio-peru' ),
+			'pickup_title'  => __( 'Recojo en Tienda (gratis)', 'ubigeo-envio-peru' ),
+			'agencia_title' => __( 'Envío por Agencia — pagas el envío al recoger en la agencia', 'ubigeo-envio-peru' ),
+		);
+		$titulo = function ( $campo ) use ( $settings, $defectos ) {
+			printf(
+				'<span data-uep-vista="%1$s" data-defecto="%2$s">%3$s</span>',
+				esc_attr( $campo ),
+				esc_attr( $defectos[ $campo ] ),
+				esc_html( '' !== trim( (string) $settings[ $campo ] ) ? $settings[ $campo ] : $defectos[ $campo ] )
+			);
+		};
+		$nota = function ( $campo ) use ( $settings ) {
+			printf(
+				'<span class="uep-vista-nota" data-uep-vista="%1$s"%2$s>%3$s</span>',
+				esc_attr( $campo ),
+				'' === trim( (string) $settings[ $campo ] ) ? ' hidden' : '',
+				esc_html( $settings[ $campo ] )
+			);
+		};
+		$precio = '<strong>' . esc_html__( 'precio del distrito', 'ubigeo-envio-peru' ) . '</strong>';
+		?>
+		<tr class="uep-fila-vista">
+			<th scope="row"><?php esc_html_e( 'Así lo verá el cliente', 'ubigeo-envio-peru' ); ?></th>
+			<td>
+				<div class="uep-vista" aria-hidden="true">
+					<?php if ( 'domicilio' === $tipo ) : ?>
+						<div class="uep-vista-opcion"><span class="uep-vista-radio"></span><span class="uep-vista-texto"><?php $titulo( 'method_title' ); ?>: <?php echo $precio; // phpcs:ignore WordPress.Security.EscapeOutput ?></span></div>
+					<?php elseif ( 'flash' === $tipo ) : ?>
+						<div class="uep-vista-opcion"><span class="uep-vista-radio"></span><span class="uep-vista-texto"><?php $titulo( 'express_title' ); ?>: <?php echo $precio; // phpcs:ignore WordPress.Security.EscapeOutput ?></span></div>
+						<div class="uep-vista-tarde" data-uep-tarde
+							 data-antes="<?php esc_attr_e( 'Después de las %s se ve así:', 'ubigeo-envio-peru' ); ?>"
+							 data-aviso="<?php esc_attr_e( 'se envía el mismo día solo en compras antes de las %s', 'ubigeo-envio-peru' ); ?>">
+							<span class="uep-vista-cuando"></span>
+							<div class="uep-vista-opcion"><span class="uep-vista-radio"></span><span class="uep-vista-texto"><span data-uep-vista="express_title_tarde"></span>: <?php echo $precio; // phpcs:ignore WordPress.Security.EscapeOutput ?></span></div>
+						</div>
+					<?php elseif ( 'recojo' === $tipo ) : ?>
+						<div class="uep-vista-opcion"><span class="uep-vista-radio"></span><span class="uep-vista-texto"><?php $titulo( 'pickup_title' ); ?></span></div>
+						<?php $nota( 'pickup_note' ); ?>
+					<?php else : ?>
+						<div class="uep-vista-opcion"><span class="uep-vista-radio"></span><span class="uep-vista-texto"><?php $titulo( 'agencia_title' ); ?></span></div>
+						<?php $nota( 'agencia_note' ); ?>
+					<?php endif; ?>
+				</div>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -1597,9 +1840,9 @@ class UEP_Admin {
 				__( '¿Cómo cambio el precio de envío de un distrito?', 'ubigeo-envio-peru' ),
 				array(
 					__( 'Ve a la pestaña "Tarifas de envío".', 'ubigeo-envio-peru' ),
-					__( 'Escribe el distrito en el buscador de la tabla "Tarifas configuradas".', 'ubigeo-envio-peru' ),
-					__( 'Haz clic en "Editar", cambia el costo normal o Flash y pulsa "Guardar".', 'ubigeo-envio-peru' ),
-					__( 'Si el distrito no aparece, agrégalo con el formulario "Agregar o actualizar una tarifa".', 'ubigeo-envio-peru' ),
+					__( 'En "Agregar o cambiar un precio" elige el departamento, la provincia y el distrito. Si ya tiene precio, verás cuál es y se cargará en el formulario.', 'ubigeo-envio-peru' ),
+					__( 'Escribe el nuevo precio (debajo verás cuánto paga el cliente en soles) y pulsa "Actualizar precio".', 'ubigeo-envio-peru' ),
+					__( 'También puedes buscar el distrito en la tabla "Precios configurados", pulsar "Editar" y luego "Guardar". La fila guardada queda resaltada.', 'ubigeo-envio-peru' ),
 				),
 				self::url( 'tarifas' ),
 			),
@@ -1608,7 +1851,7 @@ class UEP_Admin {
 				array(
 					__( 'Ve a Ajustes → "Envío a domicilio y zonas de cobertura".', 'ubigeo-envio-peru' ),
 					__( 'En "Zonas de cobertura" elige el departamento y la provincia, pulsa "Agregar zona" y guarda.', 'ubigeo-envio-peru' ),
-					__( 'En "Tarifas de envío" agrega el precio de sus distritos (o uno para toda la provincia).', 'ubigeo-envio-peru' ),
+					__( 'En "Tarifas de envío" aparecerán sus distritos sin precio: haz clic en cada uno para ponerle el suyo (o pon un precio para toda la provincia).', 'ubigeo-envio-peru' ),
 					__( 'Comprueba el resultado con el Simulador de la pestaña Inicio.', 'ubigeo-envio-peru' ),
 				),
 				$ajustes . '#uep-sec-domicilio',
@@ -1620,8 +1863,27 @@ class UEP_Admin {
 					__( 'Agrega los productos al carrito y ve a "Finalizar compra" con los datos del comprador.', 'ubigeo-envio-peru' ),
 					__( 'Elige "Flex Mercado Libre" o "Urbano (Mercado Libre)" como envío: solo tu equipo ve esas opciones.', 'ubigeo-envio-peru' ),
 					__( 'Finaliza el pedido: queda marcado como canal "interno" para tu ERP.', 'ubigeo-envio-peru' ),
+					__( 'Para agregar otro envío interno, ve a Ajustes → "Uso interno del equipo" y pulsa "+ Agregar método".', 'ubigeo-envio-peru' ),
 				),
 				$ajustes . '#uep-sec-interno',
+			),
+			array(
+				__( '¿Cómo agrego o quito una agencia?', 'ubigeo-envio-peru' ),
+				array(
+					__( 'Ve a Ajustes → "Envío por Agencia".', 'ubigeo-envio-peru' ),
+					__( 'En "Agencias disponibles" pulsa "+ Agregar agencia" y escribe el nombre, o "Quitar" junto a la que ya no uses.', 'ubigeo-envio-peru' ),
+					__( 'Pulsa "Guardar ajustes". La opción "Otro (escribir)" siempre está disponible.', 'ubigeo-envio-peru' ),
+				),
+				$ajustes . '#uep-sec-agencia',
+			),
+			array(
+				__( '¿Cómo marco un feriado para el recojo en tienda?', 'ubigeo-envio-peru' ),
+				array(
+					__( 'Ve a Ajustes → "Recojo en Tienda".', 'ubigeo-envio-peru' ),
+					__( 'En "Feriados" pulsa "+ Agregar feriado" y elige la fecha en el calendario. Verás el día de la semana para confirmar.', 'ubigeo-envio-peru' ),
+					__( 'Pulsa "Guardar ajustes": el calendario del cliente ya no dejará elegir ese día. Las fechas que ya pasaron aparecen en rojo y puedes quitarlas.', 'ubigeo-envio-peru' ),
+				),
+				$ajustes . '#uep-sec-recojo',
 			),
 			array(
 				__( 'Un cliente de provincia compró: ¿cómo lo despacho por agencia?', 'ubigeo-envio-peru' ),
@@ -1654,10 +1916,11 @@ class UEP_Admin {
 			array(
 				__( '¿Cómo elijo qué métodos de pago ve cada cliente?', 'ubigeo-envio-peru' ),
 				array(
-					__( 'Ve a Ajustes → "Métodos de pago".', 'ubigeo-envio-peru' ),
-					__( '"Pagos solo para administradores": se ocultan a los clientes (ej. link de pago).', 'ubigeo-envio-peru' ),
-					__( '"Pagos permitidos para el recojo": los únicos aceptados cuando eligen Recojo en Tienda.', 'ubigeo-envio-peru' ),
-					__( '"Pagos solo en cobertura": se ocultan fuera de tus zonas (ej. contra entrega solo en Lima Metropolitana y Callao).', 'ubigeo-envio-peru' ),
+					__( 'Ve a Ajustes → "Métodos de pago". Cada fila de la tabla es un método.', 'ubigeo-envio-peru' ),
+					__( '"Provincias": márcalo si el método sirve fuera de Lima y Callao. Desmárcalo para el contra entrega.', 'ubigeo-envio-peru' ),
+					__( '"Recojo en tienda": márcalo si se acepta cuando el cliente recoge en la tienda.', 'ubigeo-envio-peru' ),
+					__( '"Solo el equipo": márcalo para que los clientes no lo vean nunca (ej. link de pago).', 'ubigeo-envio-peru' ),
+					__( 'Pulsa "Guardar ajustes" y compruébalo con el Simulador de la pestaña Inicio.', 'ubigeo-envio-peru' ),
 				),
 				$ajustes . '#uep-sec-pagos',
 			),
@@ -1683,7 +1946,7 @@ class UEP_Admin {
 		?>
 		<div class="uep-card">
 			<h2><?php esc_html_e( 'Guía rápida', 'ubigeo-envio-peru' ); ?></h2>
-			<p class="description"><?php esc_html_e( 'Las tareas del día a día, paso a paso. Haz clic en cada pregunta para ver cómo hacerla.', 'ubigeo-envio-peru' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Las tareas del día a día, paso a paso. Haz clic en cada pregunta para ver cómo hacerla. En Ajustes, la barra de abajo te avisa si tienes cambios sin guardar, y cada sección muestra "Así lo verá el cliente".', 'ubigeo-envio-peru' ); ?></p>
 
 			<div class="uep-guia">
 				<?php foreach ( $tareas as $tarea ) : ?>
@@ -1716,7 +1979,7 @@ class UEP_Admin {
 				<dd><?php esc_html_e( 'Usuarios con rol de administrador o "Gestor de la tienda". En el checkout ven opciones internas: envíos de Mercado Libre, métodos de pago del equipo, cualquier fecha de recojo y los campos de agencia.', 'ubigeo-envio-peru' ); ?></dd>
 
 				<dt><?php esc_html_e( 'Moneda de las tarifas', 'ubigeo-envio-peru' ); ?></dt>
-				<dd><?php esc_html_e( 'Tus tarifas se escriben en la moneda base de WooCommerce. El cliente que navega en otra moneda las ve convertidas con el tipo de cambio de tu plugin de multimoneda, igual que tus productos.', 'ubigeo-envio-peru' ); ?></dd>
+				<dd><?php esc_html_e( 'Tus tarifas se escriben en la moneda base de WooCommerce. El cliente que navega en otra moneda las ve convertidas con el tipo de cambio de tu plugin de multimoneda, igual que tus productos. En "Tarifas de envío" verás debajo de cada precio cuánto es en soles.', 'ubigeo-envio-peru' ); ?></dd>
 			</dl>
 		</div>
 
@@ -1753,16 +2016,33 @@ class UEP_Admin {
 		check_admin_referer( 'uep_guardar_tarifa' );
 
 		$costo_express = isset( $_POST['costo_express'] ) ? trim( wp_unslash( $_POST['costo_express'] ) ) : '';
+		$id_depa       = isset( $_POST['idDepa'] ) ? absint( $_POST['idDepa'] ) : 0;
+		$id_prov       = isset( $_POST['idProv'] ) ? absint( $_POST['idProv'] ) : 0;
+		$id_dist       = isset( $_POST['idDist'] ) ? absint( $_POST['idDist'] ) : 0;
 
 		$ok = uep_guardar_tarifa(
-			isset( $_POST['idDepa'] ) ? absint( $_POST['idDepa'] ) : 0,
-			isset( $_POST['idProv'] ) ? absint( $_POST['idProv'] ) : 0,
-			isset( $_POST['idDist'] ) ? absint( $_POST['idDist'] ) : 0,
+			$id_depa,
+			$id_prov,
+			$id_dist,
 			isset( $_POST['costo'] ) ? (float) wp_unslash( $_POST['costo'] ) : -1,
 			'' === $costo_express ? null : (float) $costo_express
 		);
 
-		self::redirect( 'tarifas', $ok ? 'tarifa_ok' : 'tarifa_error' );
+		if ( ! $ok ) {
+			self::redirect( 'tarifas', 'tarifa_error' );
+		}
+
+		global $wpdb;
+		$tarifa_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT tarifa_id FROM {$wpdb->prefix}ubigeo_envio_tarifa WHERE idDepa = %d AND idProv = %d AND idDist = %d LIMIT 1",
+				$id_depa,
+				$id_prov,
+				$id_dist
+			)
+		);
+
+		self::redirect( 'tarifas', 'tarifa_ok', array( 'uep_resaltar' => $tarifa_id ) );
 	}
 
 	public static function editar_tarifa() {
@@ -1781,7 +2061,7 @@ class UEP_Admin {
 			'' === $costo_express ? null : (float) $costo_express
 		);
 
-		self::redirect( 'tarifas', $ok ? 'tarifa_ok' : 'tarifa_error' );
+		self::redirect( 'tarifas', $ok ? 'tarifa_ok' : 'tarifa_error', array( 'uep_resaltar' => $tarifa_id ) );
 	}
 
 	public static function eliminar_tarifa() {
@@ -1804,6 +2084,7 @@ class UEP_Admin {
 		check_admin_referer( 'uep_guardar_ajustes' );
 
 		$express_default = isset( $_POST['express_default_cost'] ) ? trim( wp_unslash( $_POST['express_default_cost'] ) ) : '';
+		$previos         = uep_get_settings();
 
 		$settings = array(
 			'checkout_enabled'     => isset( $_POST['checkout_enabled'] ) ? 'yes' : 'no',
@@ -1816,9 +2097,10 @@ class UEP_Admin {
 			'express_title'        => isset( $_POST['express_title'] ) ? sanitize_text_field( wp_unslash( $_POST['express_title'] ) ) : '',
 			'express_default_cost' => '' === $express_default ? '' : (string) max( 0, (float) $express_default ),
 			'express_cutoff'       => isset( $_POST['express_cutoff'] ) && preg_match( '/^\d{2}:\d{2}$/', $_POST['express_cutoff'] ) ? $_POST['express_cutoff'] : '',
-			'pago_solo_cobertura'  => isset( $_POST['pago_solo_cobertura'] ) ? array_values( array_map( 'sanitize_key', (array) $_POST['pago_solo_cobertura'] ) ) : array(),
-			'pago_recojo'          => isset( $_POST['pago_recojo'] ) ? array_values( array_map( 'sanitize_key', (array) $_POST['pago_recojo'] ) ) : array(),
-			'pago_solo_admin'      => isset( $_POST['pago_solo_admin'] ) ? array_values( array_map( 'sanitize_key', (array) $_POST['pago_solo_admin'] ) ) : array(),
+			// Los métodos de pago llegan en la tabla "pagos" (ver más abajo).
+			'pago_solo_cobertura'  => (array) $previos['pago_solo_cobertura'],
+			'pago_recojo'          => (array) $previos['pago_recojo'],
+			'pago_solo_admin'      => (array) $previos['pago_solo_admin'],
 			'pickup_enabled'       => isset( $_POST['pickup_enabled'] ) ? 'yes' : 'no',
 			'pickup_title'         => isset( $_POST['pickup_title'] ) ? sanitize_text_field( wp_unslash( $_POST['pickup_title'] ) ) : '',
 			'pickup_min_days'      => isset( $_POST['pickup_min_days'] ) ? (string) min( 30, max( 0, absint( $_POST['pickup_min_days'] ) ) ) : '2',
@@ -1837,6 +2119,13 @@ class UEP_Admin {
 			'admin_metodos'        => isset( $_POST['admin_metodos'] ) ? sanitize_textarea_field( wp_unslash( $_POST['admin_metodos'] ) ) : '',
 			'erp_state'            => isset( $_POST['erp_state'] ) ? 'yes' : 'no',
 		);
+
+		if ( isset( $_POST['pagos_matriz'] ) ) {
+			$settings = array_merge(
+				$settings,
+				self::pagos_desde_matriz( isset( $_POST['pagos'] ) ? (array) wp_unslash( $_POST['pagos'] ) : array() )
+			);
+		}
 
 		if ( '' === $settings['method_title'] ) {
 			$settings['method_title'] = __( 'Envío a domicilio (1 a 2 días hábiles)', 'ubigeo-envio-peru' );
@@ -1859,8 +2148,63 @@ class UEP_Admin {
 		self::redirect( 'ajustes', 'ajustes_ok' );
 	}
 
-	private static function redirect( $tab, $msg ) {
-		wp_safe_redirect( add_query_arg( 'uep_msg', $msg, self::url( $tab ) ) );
+	/**
+	 * Convierte la tabla "dónde se puede usar cada método de pago" en las tres
+	 * listas de los ajustes. Los métodos que hoy no están instalados conservan
+	 * su configuración anterior.
+	 *
+	 * @param array $marcas Casillas enviadas: [id_pasarela][agencia|recojo|equipo].
+	 * @return array pago_solo_cobertura, pago_recojo y pago_solo_admin.
+	 */
+	private static function pagos_desde_matriz( $marcas ) {
+		$previos = uep_get_settings();
+		$ids     = array_keys( WC()->payment_gateways()->payment_gateways() );
+		$ajenos  = function ( $lista ) use ( $ids ) {
+			return array_values( array_diff( (array) $lista, $ids ) );
+		};
+
+		$solo_cobertura = $ajenos( $previos['pago_solo_cobertura'] );
+		$solo_admin     = $ajenos( $previos['pago_solo_admin'] );
+		$recojo         = array();
+
+		foreach ( $ids as $id ) {
+			$marca = isset( $marcas[ $id ] ) ? (array) $marcas[ $id ] : array();
+
+			if ( empty( $marca['agencia'] ) ) {
+				$solo_cobertura[] = $id;
+			}
+			if ( ! empty( $marca['equipo'] ) ) {
+				$solo_admin[] = $id;
+			}
+			if ( ! empty( $marca['recojo'] ) ) {
+				$recojo[] = $id;
+			}
+		}
+
+		// Todos (o ninguno) marcados para el recojo = se aceptan todos, también
+		// los métodos que se instalen después.
+		if ( ! $recojo || count( $recojo ) === count( $ids ) ) {
+			$recojo = array();
+		} else {
+			$recojo = array_merge( $recojo, $ajenos( $previos['pago_recojo'] ) );
+		}
+
+		return array(
+			'pago_solo_cobertura' => array_values( array_unique( $solo_cobertura ) ),
+			'pago_recojo'         => array_values( array_unique( $recojo ) ),
+			'pago_solo_admin'     => array_values( array_unique( $solo_admin ) ),
+		);
+	}
+
+	private static function redirect( $tab, $msg, $extra = array() ) {
+		$url = add_query_arg( array_merge( array( 'uep_msg' => $msg ), $extra ), self::url( $tab ) );
+
+		// La tarifa guardada queda a la vista en la tabla.
+		if ( ! empty( $extra['uep_resaltar'] ) ) {
+			$url .= '#uep-tarifa-' . absint( $extra['uep_resaltar'] );
+		}
+
+		wp_safe_redirect( $url );
 		exit;
 	}
 

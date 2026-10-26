@@ -3,7 +3,7 @@
  * Plugin Name:       Ubigeo y Envío Perú para WooCommerce
  * Plugin URI:        https://github.com/cuernodechivo/pluginubigeoperu
  * Description:       Agrega Departamento / Provincia / Distrito (ubigeo) al checkout de WooCommerce y calcula el costo de envío según la ubicación. Todo en un solo plugin, fácil de configurar.
- * Version:           1.15.0
+ * Version:           1.16.0
  * Author:            Envío Perú
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'UEP_VERSION', '1.15.0' );
+define( 'UEP_VERSION', '1.16.0' );
 define( 'UEP_PLUGIN_FILE', __FILE__ );
 define( 'UEP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'UEP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

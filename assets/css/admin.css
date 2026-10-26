@@ -413,6 +413,241 @@
 	color: #3c434a;
 }
 
+/* ======================================================================
+ * Panel más fácil (v1.16): soles, vistas previas, listas y tabla de pagos
+ * ==================================================================== */
+
+/* --- Equivalencia en soles --- */
+.uep-equiv {
+	display: block;
+	margin-top: 2px;
+	color: #646970;
+	font-size: 11px;
+	font-weight: 400;
+	white-space: nowrap;
+}
+
+.uep-tabla tr:not(.uep-editando) .uep-equiv-vivo {
+	display: none;
+}
+
+.uep-nota-moneda {
+	margin: 10px 0 0;
+	padding: 8px 12px;
+	background: #f0f6fc;
+	border-radius: 4px;
+}
+
+/* --- Tarifas --- */
+.uep-explica {
+	margin: 8px 0 4px;
+}
+
+.uep-explica summary {
+	cursor: pointer;
+	color: #2271b1;
+}
+
+.uep-explica p {
+	margin: 6px 0 0 16px;
+	max-width: 760px;
+}
+
+.uep-aviso-existente {
+	margin: 12px 0 0;
+	padding: 8px 12px;
+	border-left: 4px solid #2271b1;
+	background: #f0f6fc;
+}
+
+.uep-card-alerta {
+	border-left: 4px solid #dba617;
+}
+
+.uep-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.uep-tabla tbody tr {
+	scroll-margin-top: 90px;
+}
+
+.uep-tabla tr.uep-resaltada td {
+	background: #fcf9e8;
+	animation: uep-resaltar 2.5s ease-out;
+}
+
+@keyframes uep-resaltar {
+	from { background: #f9e2a0; }
+	to   { background: #fcf9e8; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.uep-tabla tr.uep-resaltada td {
+		animation: none;
+	}
+}
+
+.uep-pasos {
+	margin-left: 20px;
+}
+
+.uep-pasos li {
+	max-width: 760px;
+	margin-bottom: 4px;
+}
+
+/* --- Ajustes: tabla de métodos de pago --- */
+.uep-matriz-wrap {
+	max-width: 760px;
+	margin-top: 10px;
+	overflow-x: auto;
+}
+
+.uep-matriz-pagos th span {
+	display: block;
+	color: #646970;
+	font-size: 11px;
+	font-weight: 400;
+}
+
+.uep-matriz-pagos tbody th {
+	font-weight: 600;
+}
+
+.uep-matriz-pagos .uep-col-check {
+	width: 130px;
+	text-align: center;
+	vertical-align: middle;
+}
+
+.uep-matriz-pagos tbody tr:nth-child(odd) {
+	background: #f6f7f7;
+}
+
+.uep-matriz-pagos tr.uep-solo-equipo td:nth-child(2),
+.uep-matriz-pagos tr.uep-solo-equipo td:nth-child(3) {
+	opacity: 0.35;
+}
+
+.uep-etiqueta-gris {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: #f0f0f1;
+	color: #646970;
+	font-size: 11px;
+	font-weight: 400;
+}
+
+.uep-matriz-ayuda {
+	max-width: 760px;
+	margin: 12px 0 0 18px;
+	list-style: disc;
+}
+
+.uep-matriz-ayuda li {
+	margin-bottom: 6px;
+	line-height: 1.45;
+}
+
+.uep-aviso-recojo {
+	margin: 8px 0 0;
+	color: #8a6116;
+}
+
+/* --- Ajustes: listas editables --- */
+.uep-rep-fila {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.uep-rep-costo {
+	width: 110px;
+}
+
+.uep-rep-dia {
+	color: #646970;
+}
+
+.uep-rep-pasado {
+	color: #b32d2e;
+}
+
+.uep-rep-quitar.button-link {
+	color: #b32d2e;
+}
+
+.uep-rep-vacio {
+	margin: 0 0 6px;
+}
+
+/* --- Ajustes: "Así lo verá el cliente" --- */
+.uep-vista {
+	max-width: 560px;
+	padding: 10px 14px;
+	border: 1px dashed #c3c4c7;
+	border-radius: 6px;
+	background: #f6f7f7;
+}
+
+.uep-vista-opcion {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	line-height: 1.45;
+}
+
+.uep-vista-radio {
+	flex: 0 0 auto;
+	width: 12px;
+	height: 12px;
+	margin-top: 3px;
+	border: 2px solid #8c8f94;
+	border-radius: 50%;
+	background: #fff;
+}
+
+.uep-vista-texto {
+	flex: 1 1 auto;
+}
+
+.uep-vista-tarde {
+	margin-top: 10px;
+	padding-top: 8px;
+	border-top: 1px solid #dcdcde;
+}
+
+.uep-vista-cuando {
+	display: block;
+	margin-bottom: 4px;
+	color: #646970;
+	font-size: 12px;
+}
+
+.uep-vista-nota {
+	display: block;
+	margin: 4px 0 0 22px;
+	color: #50575e;
+	font-size: 12px;
+}
+
+.uep-vista-nota[hidden] {
+	display: none;
+}
+
+/* --- Ajustes: estado de guardado --- */
+.uep-sin-guardar {
+	color: #b26200;
+	font-weight: 600;
+}
+
 @media (max-width: 782px) {
 	.uep-guardar-barra {
 		margin: 18px -12px -16px;

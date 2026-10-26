@@ -3,7 +3,7 @@ Tags: woocommerce, peru, ubigeo, envio, shipping
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.15.0
+Stable tag: 1.16.0
 License: GPLv2 or later
 
 Ubigeo (Departamento / Provincia / Distrito) en el checkout + costo de envío por zona. Todo en un solo plugin.
@@ -25,6 +25,18 @@ Un solo plugin para el ubigeo y los costos de envío en Perú:
 3. En "Ajustes" define el costo por defecto; en "Tarifas de envío" agrega los costos por departamento (y afina por provincia/distrito si lo necesitas).
 
 == Changelog ==
+
+= 1.16.0 =
+* Panel mas facil de modificar. Metodos de pago en una sola tabla "donde se puede usar cada metodo" (Provincias / Recojo en tienda / Solo el equipo) en lugar de tres listas.
+* Tarifas: debajo de cada precio se ve cuanto paga el cliente en soles (tipo de cambio del plugin de multimoneda); al elegir una zona que ya tiene precio se avisa y se carga en el formulario; lista de distritos de la cobertura sin precio propio, que con un clic llenan el formulario; la tarifa guardada queda resaltada y el aviso dice la zona y los precios; explicacion con ejemplo de como se decide el precio; pasos para cambiar muchos precios con Excel/CSV.
+* Ajustes: agencias, envios internos y feriados se editan como listas con botones "+ Agregar" y "Quitar" (los feriados con calendario, dia de la semana y aviso si ya pasaron); vista previa "Asi lo vera el cliente" en domicilio, Flash (antes y despues de la hora limite), recojo y agencia; aviso de cambios sin guardar.
+* Guia rapida actualizada, con tareas nuevas para agencias y feriados.
+
+= 1.15.2 =
+* Correccion: con "Enviar a una direccion diferente" marcado, los pagos solo en cobertura tambien se ocultan mientras el cliente no elija el departamento de facturacion (antes aparecian si la direccion de envio estaba en Lima o Callao).
+
+= 1.15.1 =
+* Correccion: al marcar "Enviar a una direccion diferente", los pagos solo en cobertura (ej. contra entrega) ya no aparecen si la direccion de facturacion esta fuera de la cobertura. Ahora la facturacion y el envio deben estar las dos en Lima Metropolitana o Callao. Tambien se valida al confirmar el pedido.
 
 = 1.15.0 =
 * Panel mas facil de usar. Nueva pestana "Inicio" con: resumen automatico de lo que ve cada cliente segun su zona; revision de la configuracion con avisos (checkout por bloques, plugins antiguos, distritos de cobertura sin tarifa, contra entrega sin restringir, Flash sin hora limite, ERP); simulador "que vera un cliente?" que muestra opciones de envio, precio, de donde sale el precio y metodos de pago para cualquier distrito, como cliente o como gestor; y atajos a las tareas frecuentes.
